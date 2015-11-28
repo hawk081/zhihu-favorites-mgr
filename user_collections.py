@@ -66,9 +66,12 @@ class CollectionGetter:
     def set_question(self, zm_item_title):
         if zm_item_title is not None and hasattr(zm_item_title, 'a'):
             self.question_title = zm_item_title.a.string
+            href = zm_item_title.a['href']
+            self.question_id = href[href.rindex('/') + 1:]
 
     def set_answer(self, zm_item_answer):
         self.answer_id = zm_item_answer['data-aid']
+        self.answer_id_url = zm_item_answer['data-atoken']
         self.author_id = zm_item_answer['data-created']
         self.author_name = ""
         infos = zm_item_answer.find_all(
@@ -103,8 +106,10 @@ class CollectionGetter:
 
     def get_collection(self):
         answer = {}
+        answer['question_id'] = self.question_id
         answer['question_title'] = self.question_title
         answer['answer_id'] = self.answer_id
+        answer['answer_id_url'] = self.answer_id_url
         answer['author_id'] = self.author_id
         answer['author_name'] = self.author_name
         answer['answer_summary'] = self.answer_summary
@@ -133,7 +138,13 @@ class Utils:
         for msg in s['msg']:
             for _msg in msg:
                 if type(_msg) == list:
-                    yield _msg
+                    item = {}
+                    item['favorite_id'] = _msg[0]
+                    item['title'] = _msg[1]
+                    item['2'] = _msg[2]
+                    item['3'] = _msg[3]
+                    item['4'] = _msg[4]
+                    yield item
 
     @staticmethod
     def getUserCollectionListColumns():
@@ -176,7 +187,7 @@ class Utils:
 
     @staticmethod
     def getTaskListColumns():
-        return [u"操作", u"从", u"到"]
+        return [u"操作", u'答案', u"从", u"到", u'状态']
 
     @staticmethod
     def add_favorite(answer_id, favlist_id):
@@ -195,14 +206,14 @@ class Utils:
         s = json.loads(r.content)
         if int(r.status_code) != 200:
             logger.debug("add_favorite fail %d!" % int(r.status_code))
-            return False
+            return {'status': False, 'msg': r.status_code, 'extra': form}
         elif s['r'] != 0:
-            logger.debug("Error msg: %s" % s['msg'].decode('utf-8').encode('gbk'))
-            return False
+            logger.debug(u"Error msg: %s" % s['msg'].decode('utf-8'))
+            return {'status': False, 'msg': s['msg'].decode('utf-8'), 'extra': form}
         else:
             logger.debug("add_favorite success!")
 
-        return True
+        return {'status': True, 'msg': 'success'}
 
     @staticmethod
     def remove_favorite(answer_id, favlist_id):
@@ -218,17 +229,31 @@ class Utils:
         }
 
         r = requests.post(url, data=form, headers=headers)
-        s = json.loads(r.content)
         if int(r.status_code) != 200:
-            logger.debug("add_favorite fail %d!" % int(r.status_code))
-            return False
-        elif s['r'] != 0:
-            logger.debug("Error msg: %s" % s['msg'].decode('utf-8').encode('gbk'))
-            return False
+            logger.debug("remove_favorite fail %d!" % int(r.status_code))
+            return {'status': False, 'msg': r.status_code, 'extra': form}
+        s = json.loads(r.content)
+        if s['r'] != 0:
+            logger.debug("Error msg: %s" % s['msg'].decode('utf-8'))
+            return {'status': False, 'msg': s['msg'].decode('utf-8'), 'extra': form}
         else:
             logger.debug("remove_favorite success!")
 
-        return True
+        return {'status': True, 'msg': 'success'}
+
+    @staticmethod
+    def move_favorite(answer_id, from_collection_id, dest_collection_id):
+        if Utils.add_favorite(answer_id, dest_collection_id):
+            if Utils.remove_favorite(answer_id, from_collection_id):
+                return {'status': True, 'msg': 'success'}
+            return {'status': False, 'msg': 'success to add, but fail to remove form original collection'}
+        return {'status': False, 'msg': 'fail to add favorite to %s' % dest_collection_id}
+
+    @staticmethod
+    def copy_favorite(answer_id, from_collection_id, dest_collection_id):
+        if Utils.add_favorite(answer_id, dest_collection_id):
+            return {'status': True, 'msg': 'success'}
+        return {'status': False, 'msg': 'fail to add favorite to %s' % dest_collection_id}
 
 zhihu_page_header = '''
 <html lang="zh-CN" dropeffect="none" class="js  show-app-promotion-bar cssanimations csstransforms csstransitions flexbox no-touchevents no-mobile"><head>
