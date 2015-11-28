@@ -1,0 +1,1 @@
+#zhihu-favorites-mgr
