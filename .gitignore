@@ -54,3 +54,9 @@ docs/_build/
 
 # PyBuilder
 target/
+*.log
+*.bak
+*.pyc
+*.spec
+*/build/*
+*/dist/*
