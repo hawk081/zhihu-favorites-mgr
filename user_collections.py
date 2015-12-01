@@ -187,7 +187,7 @@ class Utils:
 
     @staticmethod
     def getTaskListColumns():
-        return [u"操作", u'答案', u"从", u"到", u'状态']
+        return [u"操作", u'状态', u'答案', u"从", u"到" ]
 
     @staticmethod
     def add_favorite(answer_id, favlist_id):

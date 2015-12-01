@@ -306,6 +306,7 @@ class MainFrame(wx.Frame):
 
         for col, text in enumerate(Utils.getTaskListColumns()):
             self.ListCtrl_TaskList.InsertColumn(col, text)
+            self.ListCtrl_TaskList.SetColumnWidth(col, 40)
         self.tasklist_items = []
 
         self.horizontalBoxSizer.Add(
@@ -417,20 +418,20 @@ class MainFrame(wx.Frame):
         self.ListCtrl_TaskList.DeleteAllItems()
         for item in self.tasklist_items:
             index = self.ListCtrl_TaskList.InsertStringItem(sys.maxint, item['action']['name'])
-            self.ListCtrl_TaskList.SetStringItem(index, 1, u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary']))
-            self.ListCtrl_TaskList.SetStringItem(index, 2, item['from_collection_info']['title'])
-            if item['dest_collecion_info'] is not None:
-                self.ListCtrl_TaskList.SetStringItem(index, 3, item['dest_collecion_info']['title'])
-            else:
-                self.ListCtrl_TaskList.SetStringItem(index, 3, "")
             if 'status' in item:
-                self.ListCtrl_TaskList.SetStringItem(index, 4, item['status'])
+                self.ListCtrl_TaskList.SetStringItem(index, 1, item['status'])
+            else:
+                self.ListCtrl_TaskList.SetStringItem(index, 1, "")
+            self.ListCtrl_TaskList.SetStringItem(index, 2, u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary']))
+            self.ListCtrl_TaskList.SetStringItem(index, 3, item['from_collection_info']['title'])
+            if item['dest_collecion_info'] is not None:
+                self.ListCtrl_TaskList.SetStringItem(index, 4, item['dest_collecion_info']['title'])
             else:
                 self.ListCtrl_TaskList.SetStringItem(index, 4, "")
             self.TaskItemsDataMap[item['action']['name']] = item
-        self.ListCtrl_TaskList.SetColumnWidth(0, wx.LIST_AUTOSIZE)
-        self.ListCtrl_TaskList.SetColumnWidth(1, 230)
-        self.ListCtrl_TaskList.SetColumnWidth(2, wx.LIST_AUTOSIZE)
+        self.ListCtrl_TaskList.SetColumnWidth(0, 40)
+        self.ListCtrl_TaskList.SetColumnWidth(1, 40)
+        self.ListCtrl_TaskList.SetColumnWidth(2, 230)
         self.ListCtrl_TaskList.SetColumnWidth(3, wx.LIST_AUTOSIZE)
         self.ListCtrl_TaskList.SetColumnWidth(4, wx.LIST_AUTOSIZE)
 
