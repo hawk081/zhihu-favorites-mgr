@@ -99,10 +99,15 @@ class CollectionGetter:
             textarea_hidden_content = hidden_contents[0]
             textarea_hidden_content.name = "div"
             textarea_hidden_content['class'] = "content"
-            textarea_hidden_content['style'] = "width:760px;margin-left:auto;margin-right:auto;"
+            textarea_hidden_content['style'] = "width:780px;margin-left:auto;margin-right:auto;"
             self.contents = textarea_hidden_content.prettify()
             h = HTMLParser.HTMLParser()
             self.contents = h.unescape(self.contents)
+
+            # html for chm
+            textarea_hidden_content['style'] = "width:780px;margin:10px;"
+            self.chm_contents = textarea_hidden_content.prettify()
+            self.chm_contents = h.unescape(self.chm_contents)
 
     def get_collection(self):
         answer = {}
@@ -114,6 +119,10 @@ class CollectionGetter:
         answer['author_name'] = self.author_name
         answer['answer_summary'] = self.answer_summary
         answer['contents'] = self.contents
+        answer['chm_contents'] = self.chm_contents
+        answer['full_page'] = zhihu_page_header.replace('{question_title}', self.question_title).replace('{answer_content}', self.contents)
+        answer['full_title'] = u"%s - %s的回答" % (self.question_title, self.author_name)
+        answer['full_chm_page'] = zhihu_page_header.replace('{question_title}', self.question_title).replace('{answer_content}', self.chm_contents)
 
         return answer
 
@@ -261,26 +270,7 @@ zhihu_page_header = '''
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 <meta name="renderer" content="webkit">
 <title>{question_title}</title>
-<meta name="apple-itunes-app" content="app-id=432274380, app-argument=zhihu://questions/31496671">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<meta http-equiv="mobile-agent" content="format=html5;url=http://www.zhihu.com/question/31496671">
-<meta id="znonce" name="znonce" content="f7cf44443ebc4b7ba6b9f9c1272772ae">
-<link rel="apple-touch-icon-precomposed" href="http://static.zhihu.com/static/img/ios/zhihu(57px).png">
-<link rel="apple-touch-icon-precomposed" href="http://static.zhihu.com/static/img/ios/zhihu(72px).png" sizes="72x72">
-<link rel="apple-touch-icon-precomposed" href="http://static.zhihu.com/static/img/ios/zhihu(76px).png" sizes="76x76">
-<link rel="apple-touch-icon-precomposed" href="http://static.zhihu.com/static/img/ios/zhihu(114px).png" sizes="114x114">
-<link rel="apple-touch-icon-precomposed" href="http://static.zhihu.com/static/img/ios/zhihu(120px).png" sizes="120x120">
-<link rel="apple-touch-icon-precomposed" href="http://static.zhihu.com/static/img/ios/zhihu(152px).png" sizes="152x152">
-<link rel="shortcut icon" href="http://static.zhihu.com/static/favicon.ico" type="image/x-icon">
-<link rel="search" type="application/opensearchdescription+xml" href="http://static.zhihu.com/static/search.xml" title="知乎">
 <link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.7fde691e.css">
-<!--[if lt IE 9]>
-<script src="http://static.zhihu.com/static/components/respond/dest/respond.min.js"></script>
-<link href="http://static.zhihu.com/static/components/respond/cross-domain/respond-proxy.html" id="respond-proxy" rel="respond-proxy" />
-<link href="/static/components/respond/cross-domain/respond.proxy.gif" id="respond-redirect" rel="respond-redirect" />
-<script src="/static/components/respond/cross-domain/respond.proxy.js"></script>
-<![endif]-->
-<script type="text/javascript" async="" src="http://zhstatic.zhihu.com/za/za-0.1.0.min.js"></script><script async="" src="http://www.google-analytics.com/ga.js"></script><script src="http://static.zhihu.com/static/revved/-/js/instant.92770c12.js"></script><style type="text/css"></style>
 <style>html.modal-open {overflow:hidden}html.modal-doc-overflow {margin-right:14px}html.modal-doc-overflow .modal-translate-shifting.sticky {transition-property:none; transform:translateX(-7px)}html.modal-doc-overflow .modal-shifting {position:relative; right:7px}</style><style id="style-1-cropbar-clipper">/* Copyright 2014 Evernote Corporation. All rights reserved. */
 .en-markup-crop-options {
     top: 18px !important;

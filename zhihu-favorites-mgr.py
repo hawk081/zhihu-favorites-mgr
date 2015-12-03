@@ -449,17 +449,18 @@ class MainFrame(wx.Frame):
         self.ListCtrl_CollectionAnswersList.SetColumnWidth(2, wx.LIST_AUTOSIZE)
         self.ListCtrl_CollectionAnswersList.SetColumnWidth(3, wx.LIST_AUTOSIZE)
 
+    def GetSelectedAnswer(self):
+        return self.AnswersItemsDataMap[self.ListCtrl_CollectionAnswersList_item_clicked]
+
+    def GetSelectedCollection(self):
+        return self.collectionsItemsDataMap[self.ListCtrl_CollectionList_item_clicked]
+
     def OnCollectionAnswersListDoubleClick(self, event):
         self.ListCtrl_CollectionAnswersList_item_clicked = event.GetText()
         selected_answer = self.GetSelectedAnswer()
         # logger.info('OnCollectionAnswersListDoubleClick - %s' % selected_answer)
-        question_title = selected_answer['question_title']
-        answer_content = selected_answer['contents']
-
-        contents = zhihu_page_header.replace('{question_title}', question_title).replace('{answer_content}', answer_content)
-
-        question_title += u" - %s的回答" % selected_answer['author_name']
-        self.showHtml2(contents, question_title)
+        print selected_answer['full_chm_page']
+        self.showHtml2(selected_answer['full_page'], selected_answer['full_title'])
 
     def OnCollectionAnswersListRightClick(self, event):
         self.ListCtrl_CollectionAnswersList_item_clicked = event.GetText()
@@ -504,12 +505,6 @@ class MainFrame(wx.Frame):
             self.from_collection_info = self.GetSelectedCollection()
             self.AddTaskItem(action, selected_answer, self.from_collection_info)
             self.UpdateTaskList()
-
-    def GetSelectedAnswer(self):
-        return self.AnswersItemsDataMap[self.ListCtrl_CollectionAnswersList_item_clicked]
-
-    def GetSelectedCollection(self):
-        return self.collectionsItemsDataMap[self.ListCtrl_CollectionList_item_clicked]
 
     def OnMenuSelect_MoveToFavoriteList(self, event):
         operation = self.favorites_list_menu_title_by_id[event.GetId()]
@@ -578,7 +573,7 @@ class MainFrame(wx.Frame):
                 self.SetIcon(images_icon.AppIcon.GetIcon())
                 self.panel = wx.Panel(self, -1)
                 self.title = None
-                self.browser = wx.html2.WebView.New(self.panel, pos=(10, 10), size=(780, 580))
+                self.browser = wx.html2.WebView.New(self.panel, pos=(10, 10), size=(800, 580))
                 self.Bind(wx.html2.EVT_WEBVIEW_LOADED, self.OnPageLoad, self.browser)
                 internal_sizer = wx.BoxSizer(wx.VERTICAL)
                 internal_sizer.Add(self.browser, 1, wx.EXPAND, 15)
@@ -598,7 +593,7 @@ class MainFrame(wx.Frame):
                     self.title = title
                     self.SetTitle(self.title)
 
-        dialog = AnswerBrowser(None, -1, size=(820, 600))
+        dialog = AnswerBrowser(None, -1, size=(840, 600))
         dialog.browser.SetPage(content, "")
         dialog.SetTitleContent(title)
         dialog.Show()
