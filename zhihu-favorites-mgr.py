@@ -33,8 +33,32 @@ from authorize import *
 from user_logger import init_logger
 from user_collections import *
 import images_icon
+from zhihu_enum import Enum
 
 logger = logging.getLogger("UserLog")
+
+ControlID = Enum([
+'MAX_SUBMENU_COUNT= 50',
+'MENUBAR_MENU_ITEM_REFRESH = 1000',
+'MENUBAR_MENU_ITEM_SHOW_STATUSBAR',
+'MENUBAR_MENU_ITEM_HIDE_STATUSBAR',
+'MENUBAR_MENU_ITEM_EXPORT_ALL',
+'MENUBAR_MENU_ITEM_QUIT',
+'COLLECTION_LIST_MENU_OPEN',
+'COLLECTION_LIST_MENU_RENAME',
+'COLLECTION_LIST_MENU_EXPORT',
+'COLLECTION_LIST_MENU_EXPORT_CHM_UTF8',
+'COLLECTION_LIST_MENU_EXPORT_CHM_GBK',
+'COLLECTION_LIST_MENU_DELETE',
+'ANSWER_LIST_MENU_BROWSE',
+'ANSWER_LIST_MENU_BROWSE_COPY',
+'ANSWER_LIST_MENU_BROWSE_MOVE',
+'ANSWER_LIST_MENU_BROWSE_DELETE',
+'ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START',
+'ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_END = ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START + MAX_SUBMENU_COUNT',
+'ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START',
+'ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_END = ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START + MAX_SUBMENU_COUNT',
+])
 
 
 class LoginDialog(wx.Dialog):
@@ -164,18 +188,18 @@ class TaskExecutor(threading.Thread, Singleton):
                 time.sleep(1)
             else:
                 taskItem = self.taskQueue.get()
-                status = False
+                status = {'status': False, 'msg': 'No action id found'}
                 try:
-                    if taskItem['action']['id'] == 2000:  # 取消收藏
+                    if taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_DELETE:  # 取消收藏
                         status = Utils.remove_favorite(
                             taskItem['selected_answer']['answer_id'],
                             taskItem['from_collection_info']['favorite_info']['favorite_id'])
-                    elif taskItem['action']['id'] == 2001:  # 移动
+                    elif taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START:  # 移动
                         status = Utils.move_favorite(
                             taskItem['selected_answer']['answer_id'],
                             taskItem['from_collection_info']['favorite_info']['favorite_id'],
                             taskItem['dest_collecion_info']['favorite_id'])
-                    elif taskItem['action']['id'] == 2002:  # 复制
+                    elif taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START:  # 复制
                         status = Utils.copy_favorite(
                             taskItem['selected_answer']['answer_id'],
                             taskItem['from_collection_info']['favorite_info']['favorite_id'],
@@ -185,6 +209,9 @@ class TaskExecutor(threading.Thread, Singleton):
                 except Exception,e:
                     print Exception,":",e
                     traceback.print_exc()
+                    status['msg'] = traceback.format_exc()
+                    if self.callback is not None:
+                        self.callback(status, taskItem)
 
     def add_task(self, taskItem):
         self.taskQueue.put(taskItem)
@@ -192,7 +219,6 @@ class TaskExecutor(threading.Thread, Singleton):
 class ZhihuStatusBar(wx.StatusBar):
     def __init__(self, *args, **kwds):
         wx.StatusBar.__init__(self, *args, **kwds)
-
 
 class MainFrame(wx.Frame):
     def __init__(self):
@@ -223,23 +249,26 @@ class MainFrame(wx.Frame):
         self.SetStatusBar(self.statusBar)
         self.statusBar.Hide()
 
-        self.menubar_menu_items = [
-            {'id': 30000,      'text': u'刷新', 'separator': True, 'IsShown': lambda : True},
-            {'id': 30001,      'text': u'隐藏状态栏', 'separator': True, 'IsShown': lambda : self.statusBar.IsShown()},
-            {'id': 30002,      'text': u'显示状态栏', 'separator': True, 'IsShown': lambda : not self.statusBar.IsShown()},
-            {'id': wx.ID_EXIT, 'text': u'退出', 'separator': False, 'IsShown': lambda : True}
+        self.menuBar_menubar_menu_items = [
+            {'id': ControlID.MENUBAR_MENU_ITEM_REFRESH, 'title': u'刷新', 'separator': True, 'IsShown': lambda : True},
+            {'id': ControlID.MENUBAR_MENU_ITEM_SHOW_STATUSBAR, 'title': u'隐藏状态栏', 'separator': True, 'IsShown': lambda : self.statusBar.IsShown()},
+            {'id': ControlID.MENUBAR_MENU_ITEM_HIDE_STATUSBAR, 'title': u'显示状态栏', 'separator': True, 'IsShown': lambda : not self.statusBar.IsShown()},
+            {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL, 'title': u'导出所有', 'separator': True, 'IsShown': lambda : True},
+            {'id': ControlID.MENUBAR_MENU_ITEM_QUIT, 'title': u'退出', 'separator': False, 'IsShown': lambda : True}
             ]
 
-        self.menu = wx.Menu()
-        menuBar = wx.MenuBar()
-        menuBar.Append(self.menu, u"菜单")
-        self.SetMenuBar(menuBar)
+        self.menuBar_menuBar = wx.MenuBar()
+        self.SetMenuBar(self.menuBar_menuBar)
         self.UpdaetMenuBarMenu()
 
-        self.collections_menu_itemms = {
-            20000: u"打开",
-            20001: u"重命名",
-            20002: u"删除"}
+        self.collections_menu_itemms = [
+            {'id': ControlID.COLLECTION_LIST_MENU_OPEN, 'title': u"打开"},
+            {'id': ControlID.COLLECTION_LIST_MENU_RENAME, 'title': u"重命名"},
+            {'id': ControlID.COLLECTION_LIST_MENU_EXPORT, 'title': u"导出", 'hasSub': True,
+                'sub' : [{'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_UTF8, 'title': u"导出为CHM(UTF-8)"},
+                         {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_GBK, 'title': u"导出为CHM(GBK)"}]},
+            {'id': ControlID.COLLECTION_LIST_MENU_DELETE, 'title': u"删除"}
+            ]
 
         # create the list control
         self.ListCtrl_CollectionList = wx.ListCtrl(
@@ -265,12 +294,18 @@ class MainFrame(wx.Frame):
             flag=wx.ALL | wx.EXPAND,
             border=5)
 
+        self.favorites_list_menu_copy_to = []
+        self.favorites_list_menu_move_to = []
+
         # init collection answers list
-        self.collections_answers_menu_items = {
-            10000: u"浏览",
-            10001: u"复制到",
-            10002: u"移动到",
-            10003: u"取消收藏"}
+        self.collections_answers_menu_items = [
+            {'id': ControlID.ANSWER_LIST_MENU_BROWSE, 'title': u"浏览"},
+            {'id': ControlID.ANSWER_LIST_MENU_BROWSE_COPY, 'title': u"复制到", 'hasSub': True,
+                'sub': self.favorites_list_menu_copy_to},
+            {'id': ControlID.ANSWER_LIST_MENU_BROWSE_MOVE, 'title': u"移动到", 'hasSub': True,
+                'sub': self.favorites_list_menu_move_to},
+            {'id': ControlID.ANSWER_LIST_MENU_BROWSE_DELETE, 'title': u"取消收藏"},
+        ]
 
         # create the list control
         self.ListCtrl_CollectionAnswersList = wx.ListCtrl(
@@ -352,25 +387,32 @@ class MainFrame(wx.Frame):
         wx.Frame.__del__(self)
 
     def UpdaetMenuBarMenu(self):
-        items = self.menu.GetMenuItems()
-        for item in items:
-            self.menu.RemoveItem(item)
-        for menu_item in self.menubar_menu_items:
-            if menu_item['IsShown']():
-                self.menu.Append(menu_item['id'], menu_item['text'])
-                self.Bind(
-                    wx.EVT_MENU,
-                    lambda event, temp_item=menu_item:
-                        self.OnMenu(event, temp_item),
-                    id=menu_item['id'])
-                if menu_item['separator']:
-                    self.menu.AppendSeparator()
+        self.menuBar_menu = self.BuildMenuItems(self.menuBar_menubar_menu_items, self.OnMenubarMenu_Select)
+
+        index = self.menuBar_menuBar.FindMenu(u'菜单')
+        if index != wx.NOT_FOUND:
+            self.menuBar_menuBar.Replace(index, self.menuBar_menu, u'菜单')
+        else:
+            self.menuBar_menuBar.Append(self.menuBar_menu, u"菜单")
+
+    def _clear_list(self, _list_data):
+        for i in range(len(_list_data) - 1, -1, -1):
+            _list_data.pop(i)
 
     def UpdateFavoriteList(self):
-        self.favorites_list_menu_title_by_id = {}
+        # clear list
+        self._clear_list(self.favorites_list_menu_copy_to)
+        self._clear_list(self.favorites_list_menu_move_to)
         logger.info("Utils.getUserFavoriteList()")
+        idx = 0
         for favorite in self.userFavorites:
-            self.favorites_list_menu_title_by_id[wx.NewId()] = favorite
+            c_item = {'id': ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START + idx,
+                        'title': favorite['title'], 'data': favorite}
+            self.favorites_list_menu_copy_to.append(c_item)
+            m_item = {'id': ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START + idx,
+                        'title': favorite['title'], 'data': favorite}
+            self.favorites_list_menu_move_to.append(m_item)
+            idx += 1
 
     def OnMenuRefresh(self):
         # refresh
@@ -384,21 +426,21 @@ class MainFrame(wx.Frame):
         self.UpdateCollectionList()
         self.UpdateFavoriteList()
 
-    def OnMenu(self, event, menu_item):
+    def OnMenubarMenu_Select(self, event, menu_item, path):
         id = event.GetId()
         logger.info('%s(%s) clicked' % (menu_item, id))
-        if id == wx.ID_EXIT:
+        if id == ControlID.MENUBAR_MENU_ITEM_QUIT:
             self.Close()
-        elif id == 30000:
+        elif id == ControlID.MENUBAR_MENU_ITEM_REFRESH:
             self.OnMenuRefresh()
             # clear answer list
             self.ListCtrl_CollectionAnswersList.DeleteAllItems()
-        elif id == 30001:
+        elif id == ControlID.MENUBAR_MENU_ITEM_SHOW_STATUSBAR:
             self.statusBar.Hide()
             self.UpdaetMenuBarMenu()
             self.SendSizeEvent()
             #wx.PostEvent(self.GetEventHandler(), wx.SizeEvent(self.GetSize(), self.GetId()))
-        elif id == 30002:
+        elif id == ControlID.MENUBAR_MENU_ITEM_HIDE_STATUSBAR:
             self.statusBar.Show()
             self.UpdaetMenuBarMenu()
             self.SendSizeEvent()
@@ -429,7 +471,7 @@ class MainFrame(wx.Frame):
             else:
                 self.ListCtrl_TaskList.SetStringItem(index, 4, "")
             self.TaskItemsDataMap[item['action']['name']] = item
-        self.ListCtrl_TaskList.SetColumnWidth(0, 40)
+        self.ListCtrl_TaskList.SetColumnWidth(0, wx.LIST_AUTOSIZE)
         self.ListCtrl_TaskList.SetColumnWidth(1, 40)
         self.ListCtrl_TaskList.SetColumnWidth(2, 230)
         self.ListCtrl_TaskList.SetColumnWidth(3, wx.LIST_AUTOSIZE)
@@ -459,38 +501,21 @@ class MainFrame(wx.Frame):
         self.ListCtrl_CollectionAnswersList_item_clicked = event.GetText()
         selected_answer = self.GetSelectedAnswer()
         # logger.info('OnCollectionAnswersListDoubleClick - %s' % selected_answer)
-        print selected_answer['full_chm_page']
+
         self.showHtml2(selected_answer['full_page'], selected_answer['full_title'])
 
     def OnCollectionAnswersListRightClick(self, event):
         self.ListCtrl_CollectionAnswersList_item_clicked = event.GetText()
 
-        menu = wx.Menu()
-        for (id, title) in self.collections_answers_menu_items.items():
-            if cmp(title, u'移动到') == 0:
-                sub_menu = wx.Menu()
-                for (_id, _title) in self.favorites_list_menu_title_by_id.items():
-                    sub_menu.Append(_id, _title['title'])
-                    wx.EVT_MENU(menu, _id, self.OnMenuSelect_MoveToFavoriteList)
-                menu.AppendSubMenu(sub_menu, title)
-            elif cmp(title, u'复制到') == 0:
-                sub_menu = wx.Menu()
-                for (_id, _title) in self.favorites_list_menu_title_by_id.items():
-                    sub_menu.Append(_id + 1000, _title['title'])
-                    wx.EVT_MENU(menu, _id + 1000, self.OnMenuSelect_CopyToFavoriteList)
-                menu.AppendSubMenu(sub_menu, title)
-            else:
-                menu.Append(id, title)
-                wx.EVT_MENU(menu, id, self.OnMenuSelect_CollectionAnswersList)
+        menu = self.BuildMenuItems(self.collections_answers_menu_items, self.OnAnswerMenuSelect)
         self.PopupMenu(menu, event.GetPoint())
         menu.Destroy()
 
-    def OnMenuSelect_CollectionAnswersList(self, event):
-        operation = self.collections_answers_menu_items[event.GetId()]
-        target = self.ListCtrl_CollectionAnswersList_item_clicked
+    def OnAnswerMenuSelect(self, event, item, path):
+        print event,item
+        logger.info(u"=>".join([u"%s(%d)" % (p['title'], p['id']) for p in path]))
         selected_answer = self.GetSelectedAnswer()
-        logger.info('Perform "%(operation)s" on "%(target)s"' % vars())
-        if operation == u'浏览':
+        if event.GetId() == ControlID.ANSWER_LIST_MENU_BROWSE:
             logger.info('OnCollectionAnswersListDoubleClick - %s' % selected_answer)
             question_title = selected_answer['question_title']
             answer_content = selected_answer['contents']
@@ -499,34 +524,26 @@ class MainFrame(wx.Frame):
             contents = zhihu_page_header.replace('{question_title}', question_title).replace('{answer_content}', answer_content)
 
             self.showHtml2(contents, question_title)
-        elif event.GetId() == 10003:
-            action = { 'id': 2000, 'name': u'取消收藏'}
+        elif event.GetId() == ControlID.ANSWER_LIST_MENU_BROWSE_DELETE:
+            action = { 'id': event.GetId(), 'name': u'取消收藏'}
             selected_answer = self.GetSelectedAnswer()
             self.from_collection_info = self.GetSelectedCollection()
             self.AddTaskItem(action, selected_answer, self.from_collection_info)
             self.UpdateTaskList()
-
-    def OnMenuSelect_MoveToFavoriteList(self, event):
-        operation = self.favorites_list_menu_title_by_id[event.GetId()]
-        target = self.ListCtrl_CollectionAnswersList_item_clicked
-        action = { 'id': 2001, 'name': u'移动'}
-        logger.info('"%(action)s" "%(operation)s" on "%(target)s"' % vars())
-        selected_answer = self.GetSelectedAnswer()
-        from_collection_info = self.GetSelectedCollection()
-        dest_collecion_info = operation
-        self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
-        self.UpdateTaskList()
-
-    def OnMenuSelect_CopyToFavoriteList(self, event):
-        operation = self.favorites_list_menu_title_by_id[event.GetId() - 1000]
-        target = self.ListCtrl_CollectionAnswersList_item_clicked
-        action = { 'id': 2002, 'name': u'复制'}
-        logger.info('"%(action)s" "%(operation)s" on "%(target)s"' % vars())
-        selected_answer = self.GetSelectedAnswer()
-        from_collection_info = self.GetSelectedCollection()
-        dest_collecion_info = operation
-        self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
-        self.UpdateTaskList()
+        elif ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START <= event.GetId() < ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_END:
+            action = { 'id': ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START, 'name': u'复制'}
+            selected_answer = self.GetSelectedAnswer()
+            from_collection_info = self.GetSelectedCollection()
+            dest_collecion_info = item['data']
+            self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
+            self.UpdateTaskList()
+        elif ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START <= event.GetId() < ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_END:
+            action = { 'id': ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START, 'name': u'移动'}
+            selected_answer = self.GetSelectedAnswer()
+            from_collection_info = self.GetSelectedCollection()
+            dest_collecion_info = item['data']
+            self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
+            self.UpdateTaskList()
 
     def UpdateCollectionList(self):
         self.collectionsItemsDataMap = {}
@@ -545,19 +562,42 @@ class MainFrame(wx.Frame):
     def OnCollectionListRightClick(self, event):
         self.ListCtrl_CollectionList_item_clicked = event.GetText()
 
-        menu = wx.Menu()
-        for (id, title) in self.collections_menu_itemms.items():
-            menu.Append(id, title)
-            wx.EVT_MENU(menu, id, self.OnMenuSelect_CollectionList)
+        menu = self.BuildMenuItems(self.collections_menu_itemms, self.OnMenuSelect_CollectionList)
         self.PopupMenu(menu, event.GetPoint())
         menu.Destroy()
 
-    def OnMenuSelect_CollectionList(self, event):
-        operation = self.collections_menu_itemms[event.GetId()]
-        target = self.ListCtrl_CollectionList_item_clicked
+    def BuildMenuItems(self, menu_items, callback, root=None, path=None):
+        if root is None:
+            root = wx.Menu()
+            menu = root
+        else:
+            menu = wx.Menu()
+        if path is None:
+            path = []
+
+        for item in menu_items:
+            if item.has_key('IsShown') and item['IsShown']() == False:
+                pass
+            else:
+                if item.has_key('hasSub') and item['hasSub']:
+                    t_path = [x for x in path]
+                    t_path.append(item)
+                    sub_menu = self.BuildMenuItems(item['sub'], callback, root, t_path)
+                    menu.AppendSubMenu(sub_menu, item['title'])
+                else:
+                    menu.Append(item['id'], item['title'])
+                    t_path = [x for x in path]
+                    t_path.append(item)
+                    wx.EVT_MENU(root, item['id'], lambda event, temp_item=item, temp_path=t_path: callback(event, temp_item, temp_path))
+                if item.has_key('separator') and item['separator']:
+                    menu.AppendSeparator()
+
+        return menu
+
+    def OnMenuSelect_CollectionList(self, event, item, path):
         selected_item = self.GetSelectedCollection()
-        logger.info('Perform "%(operation)s" on "%(target)s."' % vars())
-        if operation == u'打开':
+        logger.info('Perform "%s" on "%s."' % (item['title'], selected_item))
+        if event.GetId() == ControlID.COLLECTION_LIST_MENU_OPEN: # 打开
             self.UpdateCollectionAnswersList(selected_item['collection_id'])
 
     def showMessageBox(self, text, caption="提示", style=wx.OK):
