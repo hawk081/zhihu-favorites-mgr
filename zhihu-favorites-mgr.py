@@ -16,7 +16,8 @@ import wx.html2
 import wx.lib.mixins.listctrl
 import threading
 from Queue import Queue
-import traceback  
+import traceback
+import tempfile
 
 # requirements
 import requests
@@ -34,6 +35,7 @@ from user_logger import init_logger
 from user_collections import *
 import images_icon
 from zhihu_enum import Enum
+from html_template import *
 
 logger = logging.getLogger("UserLog")
 
@@ -43,12 +45,16 @@ ControlID = Enum([
 'MENUBAR_MENU_ITEM_SHOW_STATUSBAR',
 'MENUBAR_MENU_ITEM_HIDE_STATUSBAR',
 'MENUBAR_MENU_ITEM_EXPORT_ALL',
+'MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8',
+'MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_GBK',
+'MENUBAR_MENU_ITEM_EXPORT_ALL_HTML',
 'MENUBAR_MENU_ITEM_QUIT',
 'COLLECTION_LIST_MENU_OPEN',
 'COLLECTION_LIST_MENU_RENAME',
 'COLLECTION_LIST_MENU_EXPORT',
 'COLLECTION_LIST_MENU_EXPORT_CHM_UTF8',
 'COLLECTION_LIST_MENU_EXPORT_CHM_GBK',
+'COLLECTION_LIST_MENU_EXPORT_HTML',
 'COLLECTION_LIST_MENU_DELETE',
 'ANSWER_LIST_MENU_BROWSE',
 'ANSWER_LIST_MENU_BROWSE_COPY',
@@ -220,6 +226,10 @@ class ZhihuStatusBar(wx.StatusBar):
     def __init__(self, *args, **kwds):
         wx.StatusBar.__init__(self, *args, **kwds)
 
+file_hndl = open(u"iiiindex.html", "w")
+file_hndl.write(index_html_template)
+file_hndl.close()
+
 class MainFrame(wx.Frame):
     def __init__(self):
         if islogin() == False:
@@ -253,7 +263,11 @@ class MainFrame(wx.Frame):
             {'id': ControlID.MENUBAR_MENU_ITEM_REFRESH, 'title': u'刷新', 'separator': True, 'IsShown': lambda : True},
             {'id': ControlID.MENUBAR_MENU_ITEM_SHOW_STATUSBAR, 'title': u'隐藏状态栏', 'separator': True, 'IsShown': lambda : self.statusBar.IsShown()},
             {'id': ControlID.MENUBAR_MENU_ITEM_HIDE_STATUSBAR, 'title': u'显示状态栏', 'separator': True, 'IsShown': lambda : not self.statusBar.IsShown()},
-            {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL, 'title': u'导出所有', 'separator': True, 'IsShown': lambda : True},
+            {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL, 'title': u'导出所有', 'separator': True, 'IsShown': lambda : True,
+                'hasSub': True,
+                'sub' : [{'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8, 'title': u"导出为CHM(UTF-8)"},
+                         {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_GBK, 'title': u"导出为CHM(GBK)"},
+                         {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML, 'title': u"导出为HTML"}]},
             {'id': ControlID.MENUBAR_MENU_ITEM_QUIT, 'title': u'退出', 'separator': False, 'IsShown': lambda : True}
             ]
 
@@ -266,7 +280,8 @@ class MainFrame(wx.Frame):
             {'id': ControlID.COLLECTION_LIST_MENU_RENAME, 'title': u"重命名"},
             {'id': ControlID.COLLECTION_LIST_MENU_EXPORT, 'title': u"导出", 'hasSub': True,
                 'sub' : [{'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_UTF8, 'title': u"导出为CHM(UTF-8)"},
-                         {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_GBK, 'title': u"导出为CHM(GBK)"}]},
+                         {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_GBK, 'title': u"导出为CHM(GBK)"},
+                         {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_HTML, 'title': u"导出为HTML"}]},
             {'id': ControlID.COLLECTION_LIST_MENU_DELETE, 'title': u"删除"}
             ]
 
@@ -360,6 +375,9 @@ class MainFrame(wx.Frame):
         self.taskExecutor = TaskExecutor(self.OnTaskFinish)
         self.taskExecutor.start()
 
+        # create tmpfile
+        self.temp_dir_path = tempfile.mkdtemp()
+
         self.panel.SetSizer(self.horizontalBoxSizer)
         self.horizontalBoxSizer.Fit(self.panel)
         self.Layout()
@@ -383,6 +401,7 @@ class MainFrame(wx.Frame):
             taskItem['status'] = self.status_msg[status['status']]
         self.UpdateTaskList()
     def __del__(self):
+        os.removedirs(self.temp_dir_path)
         self.taskExecutor.stop()
         wx.Frame.__del__(self)
 
@@ -445,6 +464,14 @@ class MainFrame(wx.Frame):
             self.UpdaetMenuBarMenu()
             self.SendSizeEvent()
             #wx.PostEvent(self.GetEventHandler(), wx.SizeEvent(self.GetSize(), self.GetId()))
+        elif id == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8:
+            pass
+        elif id == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_GBK:
+            pass
+        elif id == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML:
+            collections = list(Utils.getUserCollectionList())
+            self.ExportCollections(collections)
+
     def AddTaskItem(self, action, selected_answer, from_collection_info, dest_collecion_info=None):
         item = {}
         item['action'] = action
@@ -516,14 +543,9 @@ class MainFrame(wx.Frame):
         logger.info(u"=>".join([u"%s(%d)" % (p['title'], p['id']) for p in path]))
         selected_answer = self.GetSelectedAnswer()
         if event.GetId() == ControlID.ANSWER_LIST_MENU_BROWSE:
-            logger.info('OnCollectionAnswersListDoubleClick - %s' % selected_answer)
-            question_title = selected_answer['question_title']
-            answer_content = selected_answer['contents']
+            #logger.info('OnCollectionAnswersListDoubleClick - %s' % selected_answer)
 
-            question_title += u" - %s的回答" % selected_answer['author_name']
-            contents = zhihu_page_header.replace('{question_title}', question_title).replace('{answer_content}', answer_content)
-
-            self.showHtml2(contents, question_title)
+            self.showHtml2(selected_answer['full_page'], selected_answer['full_title'])
         elif event.GetId() == ControlID.ANSWER_LIST_MENU_BROWSE_DELETE:
             action = { 'id': event.GetId(), 'name': u'取消收藏'}
             selected_answer = self.GetSelectedAnswer()
@@ -559,6 +581,49 @@ class MainFrame(wx.Frame):
         logger.info('OnCollectionListDoubleClick - %s' % selected_item)
         self.UpdateCollectionAnswersList(selected_item['collection_id'])
 
+    def ExportCollections(self, collection_items):
+        if len(collection_items) <= 0:
+            return {'status': False, 'msg': 'No items to be exported'}
+        fname = ""
+        if len(collection_items) > 1:
+            fname = u"%s,%s等%d个收藏夹" % (collection_items[0]['title'], collection_items[1]['title'], len(collection_items))
+        else:
+            fname = collection_items[0]['title']
+
+        html_navigator_directory_list = []
+        for collection_item in collection_items:
+            directory_info = self.ExportCollection(collection_item)
+            html_navigator_directory_list.append(directory_info)
+
+        index_html = index_html_template.replace("{navigator_directory_list_items}", "".join([x['directory'] for x in html_navigator_directory_list]))
+        index_html = index_html.replace("{collection_title}", collection_items[0]['title'])
+        index_html = index_html.replace("{default_page}", "")
+        index_html = index_html.replace("{collection_set_title}", fname)
+
+        fname = "./%s.html" % fname
+        with open(fname, "wb") as fhndl:
+             fhndl.write(index_html)
+
+    def ExportCollection(self, collection):
+        answerItems = Utils.getAnswersInCollection(collection['collection_id'])
+        html_navigator_list = []
+        all_pages_relative_path = []
+        for answerItem in answerItems:
+            status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['answer_id'])
+            index_html_navigator = index_html_navigator_item_template.replace("{target_html_relative_path}", status['fname'])
+            index_html_navigator = index_html_navigator.replace("{question_title}", answerItem['full_title'])
+            html_navigator_list.append(index_html_navigator)
+            all_pages_relative_path.append(status['fname'])
+
+        index_html_navigator_directory_item = index_html_navigator_directory_item_template.replace("{navigator_list_items}", "".join(html_navigator_list))
+        index_html_navigator_directory_item = index_html_navigator_directory_item.replace("{collection_title}", collection['title'])
+
+        default_page = ""
+        if len(all_pages_relative_path) > 0:
+            default_page = all_pages_relative_path[0]
+
+        return {'directory': index_html_navigator_directory_item, 'default': default_page }
+
     def OnCollectionListRightClick(self, event):
         self.ListCtrl_CollectionList_item_clicked = event.GetText()
 
@@ -567,6 +632,16 @@ class MainFrame(wx.Frame):
         menu.Destroy()
 
     def BuildMenuItems(self, menu_items, callback, root=None, path=None):
+        '''
+        menu_items = [
+            {'id': id_1, 'title': u"title"},
+            {'id': id_2, 'title': u"title2", 'hasSub': True,
+                'sub': [
+                    {'id': sub_id_1, 'title': u"sub title 1"},
+                    {'id': sub_id_2, 'title': u"sub title 2"},
+                    ]},
+        ]
+        '''
         if root is None:
             root = wx.Menu()
             menu = root
@@ -582,13 +657,13 @@ class MainFrame(wx.Frame):
                 if item.has_key('hasSub') and item['hasSub']:
                     t_path = [x for x in path]
                     t_path.append(item)
-                    sub_menu = self.BuildMenuItems(item['sub'], callback, root, t_path)
+                    sub_menu = self.BuildMenuItems(item['sub'], callback, self, t_path)
                     menu.AppendSubMenu(sub_menu, item['title'])
                 else:
                     menu.Append(item['id'], item['title'])
                     t_path = [x for x in path]
                     t_path.append(item)
-                    wx.EVT_MENU(root, item['id'], lambda event, temp_item=item, temp_path=t_path: callback(event, temp_item, temp_path))
+                    wx.EVT_MENU(self, item['id'], lambda event, temp_item=item, temp_path=t_path: callback(event, temp_item, temp_path))
                 if item.has_key('separator') and item['separator']:
                     menu.AppendSeparator()
 
@@ -599,6 +674,10 @@ class MainFrame(wx.Frame):
         logger.info('Perform "%s" on "%s."' % (item['title'], selected_item))
         if event.GetId() == ControlID.COLLECTION_LIST_MENU_OPEN: # 打开
             self.UpdateCollectionAnswersList(selected_item['collection_id'])
+        elif event.GetId() == ControlID.COLLECTION_LIST_MENU_EXPORT_HTML:
+            dummy_items = []
+            dummy_items.append(selected_item)
+            self.ExportCollections(dummy_items)
 
     def showMessageBox(self, text, caption="提示", style=wx.OK):
         dlg = wx.MessageDialog(None, text, caption, style)
@@ -623,6 +702,7 @@ class MainFrame(wx.Frame):
                 sizer.Add(self.panel, 1, wx.EXPAND, 10)
                 self.SetSizer(sizer)
                 internal_sizer.Fit(self.panel)
+                self.Center()
 
             def OnPageLoad(self, event):
                 self.WebTitle = self.browser.GetCurrentTitle()

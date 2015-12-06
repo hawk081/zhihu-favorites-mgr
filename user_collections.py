@@ -10,6 +10,7 @@ import json
 import cookielib
 import codecs
 import HTMLParser
+import traceback
 
 # requirements
 import requests
@@ -28,11 +29,12 @@ from user_logger import init_logger
 init_logger()
 logger = logging.getLogger("UserLog")
 
-requests = requests.Session()
-requests.cookies = cookielib.LWPCookieJar('cookies')
+requests.packages.urllib3.disable_warnings()
+zhihu_requests = requests.Session()
+zhihu_requests.cookies = cookielib.LWPCookieJar('cookies')
 
 try:
-    requests.cookies.load(ignore_discard=True)
+    zhihu_requests.cookies.load(ignore_discard=True)
 except:
     pass
 
@@ -126,12 +128,23 @@ class CollectionGetter:
 
         return answer
 
+class ResDownloader:
+    def __init__(self, url, dir):
+        self.url    = url
+        self.fname  = "%s/%s" % (dir, url[url.rfind('/')+1:])
+    def download(self, url, fname):
+        print "downloading %s " % fname
+        r = requests.get(url)
+        with open(fname, "wb") as fhndl:
+             fhndl.write(r.content)
+    def run(self):
+        self.download(self.url, self.fname)
 
 class Utils:
     @staticmethod
     def search_xsrf():
         url = "http://www.zhihu.com/"
-        r = requests.get(url)
+        r = zhihu_requests.get(url)
         if int(r.status_code) != 200:
             logger.error('fetch XSRF fail')
         results = re.compile(r"\<input\stype=\"hidden\"\sname=\"_xsrf\"\svalue=\"(\S+)\"", re.DOTALL).findall(r.text)
@@ -142,7 +155,7 @@ class Utils:
 
     @staticmethod
     def getUserFavoriteList():
-        r = requests.get("http://www.zhihu.com/collections/json?answer_id=20176787")
+        r = zhihu_requests.get("http://www.zhihu.com/collections/json?answer_id=20176787")
         s = json.loads(r.content)
         for msg in s['msg']:
             for _msg in msg:
@@ -161,7 +174,7 @@ class Utils:
 
     @staticmethod
     def getUserCollectionList():
-        r = requests.get("http://www.zhihu.com/collections/mine")
+        r = zhihu_requests.get("http://www.zhihu.com/collections/mine")
         soup = BeautifulSoup(r.content, 'html5lib')
         zm_items = soup.find_all("div", class_="zm-item")
         for zm_item in zm_items:
@@ -178,7 +191,7 @@ class Utils:
 
     @staticmethod
     def getAnswersInCollection(collection_id):
-        r = requests.get("http://www.zhihu.com/collection/" + str(collection_id))
+        r = zhihu_requests.get("http://www.zhihu.com/collection/" + str(collection_id))
         soup = BeautifulSoup(r.content, 'html5lib')
         zm_items = soup.find_all("div", class_="zm-item")
         _collectionGetter = CollectionGetter()
@@ -211,7 +224,7 @@ class Utils:
             'X-Requested-With': "XMLHttpRequest"
         }
 
-        r = requests.post(url, data=form, headers=headers)
+        r = zhihu_requests.post(url, data=form, headers=headers)
         s = json.loads(r.content)
         if int(r.status_code) != 200:
             logger.debug("add_favorite fail %d!" % int(r.status_code))
@@ -237,7 +250,7 @@ class Utils:
             'X-Requested-With': "XMLHttpRequest"
         }
 
-        r = requests.post(url, data=form, headers=headers)
+        r = zhihu_requests.post(url, data=form, headers=headers)
         if int(r.status_code) != 200:
             logger.debug("remove_favorite fail %d!" % int(r.status_code))
             return {'status': False, 'msg': r.status_code, 'extra': form}
@@ -264,26 +277,70 @@ class Utils:
             return {'status': True, 'msg': 'success'}
         return {'status': False, 'msg': 'fail to add favorite to %s' % dest_collection_id}
 
+    # 1. find all resources by reg:"[-\w\./:]+\.(css|js|jpg|png|bmp|jpeg)"
+    # 2. download resources to res
+    # 3. replace the orginal link with local link
+    # 4. link all html to index.html
+    # 5. copy file from temp_dir_path to local
+    @staticmethod
+    def export_html_and_res(html_content, collection_title, answer_id, base_dir="."):
+        collection_path = "%s/%s" % (base_dir, collection_title)
+        collection_res_path = "%s/res" % collection_path
+        answer_res_path = "%s/%s" % (collection_res_path, answer_id)
+        
+        if not os.path.exists(collection_path):
+            os.makedirs(collection_path)
+        if not os.path.exists(collection_res_path):
+            os.makedirs(collection_res_path)
+        if not os.path.exists(answer_res_path):
+            os.makedirs(answer_res_path)
+        # ([-\w]+)\s*=\s*"([-\w\./:]+\.(?:css|js|jpg|png|bmp|jpeg))"
+        res_re_obj = re.compile(r"([-\w]+)\s*=\s*\"([-\w\./:]+\.(?:css|js|jpg|png|bmp|jpeg))\"")
+        results = res_re_obj.findall(html_content)
+        if results:
+            for result in results:
+                if cmp(result[0], "data-original") != 0:
+                    status = Utils.download_res(result[1], answer_res_path)
+                    if status['status']:
+                        html_content = html_content.replace(result[1], status['r'])
+        fname = "%s/%s.html" % (collection_path, answer_id)
+        with open(fname, "wb") as fhndl:
+             fhndl.write(html_content)
+
+        return {'status': True, 'fname': fname}
+
+    @staticmethod
+    def download_res(url, dir):
+        def download(url, fname):
+            status = True
+            print "downloading %s " % fname
+            try:
+                headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
+                        }
+                r = requests.get(url, headers=headers, verify=False)
+                with open(fname, "wb") as fhndl:
+                     fhndl.write(r.content)
+            except Exception,e:
+                status = False
+                print Exception,":",e
+                traceback.print_exc()
+
+            return status
+        fname  = "%s/%s" % (dir, url[url.rfind('/')+1:])
+        status = download(url, fname)
+        relative_fname = re.sub(r".*?res", "./res", fname)
+        return {'status': status, 'url': fname, 'o': url, 'r': relative_fname}
+
 zhihu_page_header = '''
-<html lang="zh-CN" dropeffect="none" class="js  show-app-promotion-bar cssanimations csstransforms csstransitions flexbox no-touchevents no-mobile"><head>
+<html lang="zh-CN" dropeffect="none" class="js  show-app-promotion-bar cssanimations csstransforms csstransitions flexbox no-touchevents no-mobile">
+<head>
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 <meta name="renderer" content="webkit">
 <title>{question_title}</title>
 <link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.7fde691e.css">
-<style>html.modal-open {overflow:hidden}html.modal-doc-overflow {margin-right:14px}html.modal-doc-overflow .modal-translate-shifting.sticky {transition-property:none; transform:translateX(-7px)}html.modal-doc-overflow .modal-shifting {position:relative; right:7px}</style><style id="style-1-cropbar-clipper">/* Copyright 2014 Evernote Corporation. All rights reserved. */
-.en-markup-crop-options {
-    top: 18px !important;
-    left: 50% !important;
-    margin-left: -100px !important;
-    width: 200px !important;
-    border: 2px rgba(255,255,255,.38) solid !important;
-    border-radius: 4px !important;
-}
-.en-markup-crop-options div div:first-of-type {
-    margin-left: 0px !important;
-}
-</style></head>
+</head>
 <body style='align:center;'>
 {answer_content}
 </body>
