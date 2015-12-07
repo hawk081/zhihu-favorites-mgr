@@ -102,6 +102,7 @@ class CollectionGetter:
             textarea_hidden_content.name = "div"
             textarea_hidden_content['class'] = "content"
             textarea_hidden_content['style'] = "width:780px;margin-left:auto;margin-right:auto;"
+
             self.contents = textarea_hidden_content.prettify()
             h = HTMLParser.HTMLParser()
             self.contents = h.unescape(self.contents)
@@ -122,9 +123,22 @@ class CollectionGetter:
         answer['answer_summary'] = self.answer_summary
         answer['contents'] = self.contents
         answer['chm_contents'] = self.chm_contents
-        answer['full_page'] = zhihu_page_header.replace('{question_title}', self.question_title).replace('{answer_content}', self.contents)
+
+        question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin-left:auto;margin-right:auto;')
+        full_page = zhihu_page_header.replace('{question_title_fld}', question_title_fld)
+        full_page = full_page.replace('{question_title}', self.question_title)
+        full_page = full_page.replace('{answer_content}', self.contents)
+        full_page = full_page.replace('{question_id}', self.question_id)
+        answer['full_page'] = full_page
+
         answer['full_title'] = u"%s - %s的回答" % (self.question_title, self.author_name)
-        answer['full_chm_page'] = zhihu_page_header.replace('{question_title}', self.question_title).replace('{answer_content}', self.chm_contents)
+
+        question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin:10px;')
+        full_chm_page = zhihu_page_header.replace('{question_title_fld}', question_title_fld)
+        full_chm_page = full_chm_page.replace('{question_title}', self.question_title)
+        full_chm_page = full_chm_page.replace('{answer_content}', self.chm_contents)
+        full_chm_page = full_chm_page.replace('{question_id}', self.question_id)
+        answer['full_chm_page'] = full_chm_page
 
         return answer
 
@@ -286,12 +300,18 @@ class Utils:
     def export_html_and_res(html_content, collection_title, answer_id, base_dir="."):
         collection_path = "%s/%s" % (base_dir, collection_title)
         collection_res_path = "%s/res" % collection_path
+        collection_css_path = "%s/css" % collection_res_path
+        collection_js_path = "%s/js" % collection_res_path
         answer_res_path = "%s/%s" % (collection_res_path, answer_id)
         
         if not os.path.exists(collection_path):
             os.makedirs(collection_path)
         if not os.path.exists(collection_res_path):
             os.makedirs(collection_res_path)
+        if not os.path.exists(collection_css_path):
+            os.makedirs(collection_css_path)
+        if not os.path.exists(collection_js_path):
+            os.makedirs(collection_js_path)
         if not os.path.exists(answer_res_path):
             os.makedirs(answer_res_path)
         # ([-\w]+)\s*=\s*"([-\w\./:]+\.(?:css|js|jpg|png|bmp|jpeg))"
@@ -300,14 +320,22 @@ class Utils:
         if results:
             for result in results:
                 if cmp(result[0], "data-original") != 0:
-                    status = Utils.download_res(result[1], answer_res_path)
+                    status = {'status': False, 'url': "", 'o': "", 'r': result[1]}
+                    if result[1].endswith('.css'):
+                        status = Utils.download_res(result[1], collection_css_path)
+                    elif result[1].endswith('.js'):
+                        status = Utils.download_res(result[1], collection_js_path)
+                    else:
+                        status = Utils.download_res(result[1], answer_res_path)
+
                     if status['status']:
                         html_content = html_content.replace(result[1], status['r'])
+
         fname = "%s/%s.html" % (collection_path, answer_id)
         with open(fname, "wb") as fhndl:
              fhndl.write(html_content)
 
-        return {'status': True, 'fname': fname}
+        return {'status': True, 'fname': fname, "r": re.sub(r".*?export", ".", fname)}
 
     @staticmethod
     def download_res(url, dir):
@@ -342,9 +370,18 @@ zhihu_page_header = '''
 <link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.7fde691e.css">
 </head>
 <body style='align:center;'>
+{question_title_fld}
 {answer_content}
 </body>
 </html>
+'''
+
+zhihu_question_title_fld_template = r'''
+<br />
+<h3 class="zm-item-title" style="{style}">
+<a href="http://www.zhihu.com/question/{question_id}" target="_blank">{question_title}</a>
+</h3>
+<br />
 '''
 
 # Test

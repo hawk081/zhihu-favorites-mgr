@@ -222,13 +222,11 @@ class TaskExecutor(threading.Thread, Singleton):
     def add_task(self, taskItem):
         self.taskQueue.put(taskItem)
 
+
 class ZhihuStatusBar(wx.StatusBar):
     def __init__(self, *args, **kwds):
         wx.StatusBar.__init__(self, *args, **kwds)
 
-file_hndl = open(u"iiiindex.html", "w")
-file_hndl.write(index_html_template)
-file_hndl.close()
 
 class MainFrame(wx.Frame):
     def __init__(self):
@@ -590,9 +588,11 @@ class MainFrame(wx.Frame):
         else:
             fname = collection_items[0]['title']
 
+        base_dir = "./export"
+
         html_navigator_directory_list = []
         for collection_item in collection_items:
-            directory_info = self.ExportCollection(collection_item)
+            directory_info = self.ExportCollection(collection_item, base_dir)
             html_navigator_directory_list.append(directory_info)
 
         index_html = index_html_template.replace("{navigator_directory_list_items}", "".join([x['directory'] for x in html_navigator_directory_list]))
@@ -600,17 +600,19 @@ class MainFrame(wx.Frame):
         index_html = index_html.replace("{default_page}", "")
         index_html = index_html.replace("{collection_set_title}", fname)
 
-        fname = "./%s.html" % fname
+        fname = "%s/%s.html" % (base_dir, fname)
         with open(fname, "wb") as fhndl:
              fhndl.write(index_html)
 
-    def ExportCollection(self, collection):
+        logger.info(u"导出成功 - %s" % fname)
+
+    def ExportCollection(self, collection, base_dir):
         answerItems = Utils.getAnswersInCollection(collection['collection_id'])
         html_navigator_list = []
         all_pages_relative_path = []
         for answerItem in answerItems:
-            status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['answer_id'])
-            index_html_navigator = index_html_navigator_item_template.replace("{target_html_relative_path}", status['fname'])
+            status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['answer_id'], base_dir)
+            index_html_navigator = index_html_navigator_item_template.replace("{target_html_relative_path}", status['r'])
             index_html_navigator = index_html_navigator.replace("{question_title}", answerItem['full_title'])
             html_navigator_list.append(index_html_navigator)
             all_pages_relative_path.append(status['fname'])
