@@ -700,6 +700,8 @@ class MainFrame(wx.Frame):
                 internal_sizer.Add(self.browser, 1, wx.EXPAND, 15)
                 self.panel.SetSizer(internal_sizer)
 
+                self.Bind(wx.EVT_CHAR_HOOK, self.OnKeyUP)
+
                 sizer = wx.BoxSizer(wx.VERTICAL)
                 sizer.Add(self.panel, 1, wx.EXPAND, 10)
                 self.SetSizer(sizer)
@@ -714,6 +716,11 @@ class MainFrame(wx.Frame):
                 if title is not None and len(title.strip()) > 0:
                     self.title = title
                     self.SetTitle(self.title)
+
+            def OnKeyUP(self, event):
+                keyCode = event.GetKeyCode()
+                if keyCode == wx.WXK_ESCAPE:
+                    self.Close()
 
         dialog = AnswerBrowser(None, -1, size=(840, 600))
         dialog.browser.SetPage(content, "")
