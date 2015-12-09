@@ -48,3 +48,29 @@ index_html_navigator_directory_item_template = r"""
 index_html_navigator_item_template = r"""
 <li><span class="file"><a href="{target_html_relative_path}" target="content_frame">{question_title}</a></span></li>
 """
+
+zhihu_page_header = '''
+<html lang="zh-CN" dropeffect="none" class="js  show-app-promotion-bar cssanimations csstransforms csstransitions flexbox no-touchevents no-mobile">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="renderer" content="webkit">
+<title>{question_title}</title>
+<link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.7fde691e.css">
+</head>
+<body style='align:center;'>
+{question_title_fld}
+{answer_content}
+</body>
+</html>
+'''
+
+zhihu_question_title_fld_template = r'''
+<br />
+<h3 class="zm-item-title" style="{style}">
+<a href="http://www.zhihu.com/question/{question_id}" target="_blank">{question_title}</a>
+ - 
+<a href="http://www.zhihu.com{author_url}" target="_blank">{author_name}</a>
+</h3>
+<br />
+'''

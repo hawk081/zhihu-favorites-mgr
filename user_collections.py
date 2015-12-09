@@ -25,6 +25,8 @@ except:
 # module
 from authorize import islogin
 from user_logger import init_logger
+from html_template import *
+from chm_utils import *
 
 init_logger()
 logger = logging.getLogger("UserLog")
@@ -76,14 +78,17 @@ class CollectionGetter:
         self.answer_id_url = zm_item_answer['data-atoken']
         self.author_id = zm_item_answer['data-created']
         self.author_name = ""
+        self.author_url = ""
         infos = zm_item_answer.find_all(
             "div",
             class_="zm-item-answer-author-info")
         if len(infos) > 0:
             if hasattr(infos[0], 'a') and infos[0].a is not None:
                 self.author_name = infos[0].a.string
+                self.author_url = infos[0].a['href']
             elif hasattr(infos[0], 'span') and infos[0].span is not None:
                 self.author_name = infos[0].span.string
+                self.author_url = ""
         zh_summarys = zm_item_answer.find_all(
             "div",
             class_="zh-summary summary clearfix")
@@ -119,12 +124,16 @@ class CollectionGetter:
         answer['answer_id'] = self.answer_id
         answer['answer_id_url'] = self.answer_id_url
         answer['author_id'] = self.author_id
+        answer['author_url'] = self.author_url
         answer['author_name'] = self.author_name
         answer['answer_summary'] = self.answer_summary
         answer['contents'] = self.contents
         answer['chm_contents'] = self.chm_contents
 
         question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin-left:auto;margin-right:auto;')
+        question_title_fld = question_title_fld.replace('{author_url}', self.author_url)
+        question_title_fld = question_title_fld.replace('{author_name}', self.author_name)
+
         full_page = zhihu_page_header.replace('{question_title_fld}', question_title_fld)
         full_page = full_page.replace('{question_title}', self.question_title)
         full_page = full_page.replace('{answer_content}', self.contents)
@@ -134,25 +143,23 @@ class CollectionGetter:
         answer['full_title'] = u"%s - %s的回答" % (self.question_title, self.author_name)
 
         question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin:10px;')
+        question_title_fld = question_title_fld.replace('{author_url}', self.author_url)
+        question_title_fld = question_title_fld.replace('{author_name}', self.author_name)
+
         full_chm_page = zhihu_page_header.replace('{question_title_fld}', question_title_fld)
         full_chm_page = full_chm_page.replace('{question_title}', self.question_title)
         full_chm_page = full_chm_page.replace('{answer_content}', self.chm_contents)
         full_chm_page = full_chm_page.replace('{question_id}', self.question_id)
         answer['full_chm_page'] = full_chm_page
 
-        return answer
+        #full_chm_page_gbk = zhihu_page_header.replace('utf-8', 'gbk')
+        #full_chm_page_gbk = full_chm_page_gbk.replace('{question_title_fld}', question_title_fld)
+        #full_chm_page_gbk = full_chm_page_gbk.replace('{question_title}', self.question_title)
+        #full_chm_page_gbk = full_chm_page_gbk.replace('{answer_content}', self.chm_contents)
+        #full_chm_page_gbk = full_chm_page_gbk.replace('{question_id}', self.question_id)
+        #answer['full_chm_page_gbk'] = full_chm_page_gbk.encode('gbk')
 
-class ResDownloader:
-    def __init__(self, url, dir):
-        self.url    = url
-        self.fname  = "%s/%s" % (dir, url[url.rfind('/')+1:])
-    def download(self, url, fname):
-        print "downloading %s " % fname
-        r = requests.get(url)
-        with open(fname, "wb") as fhndl:
-             fhndl.write(r.content)
-    def run(self):
-        self.download(self.url, self.fname)
+        return answer
 
 class Utils:
     @staticmethod
@@ -297,7 +304,7 @@ class Utils:
     # 4. link all html to index.html
     # 5. copy file from temp_dir_path to local
     @staticmethod
-    def export_html_and_res(html_content, collection_title, answer_id, base_dir="."):
+    def export_html_and_res(html_content, collection_title, answer_id, base_dir=".", progress_callback=None):
         collection_path = "%s/%s" % (base_dir, collection_title)
         collection_res_path = "%s/res" % collection_path
         collection_css_path = "%s/css" % collection_res_path
@@ -323,10 +330,16 @@ class Utils:
                     status = {'status': False, 'url': "", 'o': "", 'r': result[1]}
                     if result[1].endswith('.css'):
                         status = Utils.download_res(result[1], collection_css_path)
+                        if progress_callback is not None:
+                            progress_callback({'msg': status['r']})
                     elif result[1].endswith('.js'):
                         status = Utils.download_res(result[1], collection_js_path)
+                        if progress_callback is not None:
+                            progress_callback({'msg': status['r']})
                     else:
                         status = Utils.download_res(result[1], answer_res_path)
+                        if progress_callback is not None:
+                            progress_callback({'msg': status['r']})
 
                     if status['status']:
                         html_content = html_content.replace(result[1], status['r'])
@@ -334,6 +347,9 @@ class Utils:
         fname = "%s/%s.html" % (collection_path, answer_id)
         with open(fname, "wb") as fhndl:
              fhndl.write(html_content)
+
+        if progress_callback is not None:
+            progress_callback({'msg': fname})
 
         return {'status': True, 'fname': fname, "r": re.sub(r".*?export", ".", fname)}
 
@@ -360,29 +376,70 @@ class Utils:
         relative_fname = re.sub(r".*?res", "./res", fname)
         return {'status': status, 'url': fname, 'o': url, 'r': relative_fname}
 
-zhihu_page_header = '''
-<html lang="zh-CN" dropeffect="none" class="js  show-app-promotion-bar cssanimations csstransforms csstransitions flexbox no-touchevents no-mobile">
-<head>
-<meta charset="utf-8">
-<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="renderer" content="webkit">
-<title>{question_title}</title>
-<link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.7fde691e.css">
-</head>
-<body style='align:center;'>
-{question_title_fld}
-{answer_content}
-</body>
-</html>
-'''
+    @staticmethod
+    def export_collections_chm(collection_items, progress_callback=None):
+        status = Utils.export_collections(collection_items, progress_callback, True)
+        if progress_callback is not None:
+            progress_callback({'msg': "正在转换为chm文件"})
+        status = CHMFile(status['fname']).build()
+        if progress_callback is not None:
+            progress_callback({'msg': "成功! %s" % status['fname']})
 
-zhihu_question_title_fld_template = r'''
-<br />
-<h3 class="zm-item-title" style="{style}">
-<a href="http://www.zhihu.com/question/{question_id}" target="_blank">{question_title}</a>
-</h3>
-<br />
-'''
+        fname = status['fname']
+        return {'status': True, 'msg': u'导出成功 %s' % fname, 'fname': fname}
+
+    @staticmethod
+    def export_collections(collection_items, progress_callback=None, export_for_chm=False):
+        if len(collection_items) <= 0:
+            return {'status': False, 'msg': 'No items to be exported'}
+        fname = ""
+        if len(collection_items) > 1:
+            fname = u"%s,%s等%d个收藏夹" % (collection_items[0]['title'], collection_items[1]['title'], len(collection_items))
+        else:
+            fname = collection_items[0]['title']
+
+        base_dir = "./export"
+
+        html_navigator_directory_list = []
+        for collection_item in collection_items:
+            directory_info = Utils.export_collection(collection_item, base_dir, progress_callback, export_for_chm)
+            html_navigator_directory_list.append(directory_info)
+
+        index_html = index_html_template.replace("{navigator_directory_list_items}", "".join([x['directory'] for x in html_navigator_directory_list]))
+        index_html = index_html.replace("{collection_title}", fname)
+        index_html = index_html.replace("{default_page}", "")
+        index_html = index_html.replace("{collection_set_title}", fname)
+
+        fname = "%s/%s.html" % (base_dir, fname)
+        with open(fname, "wb") as fhndl:
+             fhndl.write(index_html)
+
+        logger.info(u"导出成功 - %s" % fname)
+        return {'status': True, 'msg': u'导出成功 %s' % fname, 'fname': fname}
+
+    @staticmethod
+    def export_collection(collection, base_dir, progress_callback=None, export_for_chm=False):
+        answerItems = Utils.getAnswersInCollection(collection['collection_id'])
+        html_navigator_list = []
+        all_pages_relative_path = []
+        for answerItem in answerItems:
+            if export_for_chm:
+                status = Utils.export_html_and_res(answerItem['full_chm_page'], collection['title'], answerItem['answer_id'], base_dir, progress_callback)
+            else:
+                status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['answer_id'], base_dir, progress_callback)
+            index_html_navigator = index_html_navigator_item_template.replace("{target_html_relative_path}", status['r'])
+            index_html_navigator = index_html_navigator.replace("{question_title}", answerItem['full_title'])
+            html_navigator_list.append(index_html_navigator)
+            all_pages_relative_path.append(status['fname'])
+
+        index_html_navigator_directory_item = index_html_navigator_directory_item_template.replace("{navigator_list_items}", "".join(html_navigator_list))
+        index_html_navigator_directory_item = index_html_navigator_directory_item.replace("{collection_title}", collection['title'])
+
+        default_page = ""
+        if len(all_pages_relative_path) > 0:
+            default_page = all_pages_relative_path[0]
+
+        return {'directory': index_html_navigator_directory_item, 'default': default_page }
 
 # Test
 if __name__ == '__main__':

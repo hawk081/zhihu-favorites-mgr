@@ -176,10 +176,11 @@ class Singleton(object):
         return cls._inst
 
 class TaskExecutor(threading.Thread, Singleton):
-    def __init__(self, callback=None):
+    def __init__(self, callback=None, progress_callback=None):
         threading.Thread.__init__(self)
         self.taskQueue = Queue()
         self.callback = callback
+        self.progress_callback = progress_callback
         self.timeToQuit = threading.Event()
         self.timeToQuit.clear()
 
@@ -210,6 +211,10 @@ class TaskExecutor(threading.Thread, Singleton):
                             taskItem['selected_answer']['answer_id'],
                             taskItem['from_collection_info']['favorite_info']['favorite_id'],
                             taskItem['dest_collecion_info']['favorite_id'])
+                    elif taskItem['action']['id'] == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML:  # 导出
+                        status = Utils.export_collections(taskItem['export_collections'], self.progress_callback)
+                    elif taskItem['action']['id'] == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8:  # 导出
+                        status = Utils.export_collections_chm(taskItem['export_collections'], self.progress_callback)
                     if self.callback is not None:
                         self.callback(status, taskItem)
                 except Exception,e:
@@ -226,7 +231,10 @@ class TaskExecutor(threading.Thread, Singleton):
 class ZhihuStatusBar(wx.StatusBar):
     def __init__(self, *args, **kwds):
         wx.StatusBar.__init__(self, *args, **kwds)
+        self.basicLabel = wx.StaticText(self, -1, u"", pos=(5, 5))
 
+    def setText(self, text):
+        self.basicLabel.SetLabel(text)
 
 class MainFrame(wx.Frame):
     def __init__(self):
@@ -264,7 +272,7 @@ class MainFrame(wx.Frame):
             {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL, 'title': u'导出所有', 'separator': True, 'IsShown': lambda : True,
                 'hasSub': True,
                 'sub' : [{'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8, 'title': u"导出为CHM(UTF-8)"},
-                         {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_GBK, 'title': u"导出为CHM(GBK)"},
+                         {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_GBK, 'title': u"导出为CHM(GBK)", 'IsShown': lambda : False},
                          {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML, 'title': u"导出为HTML"}]},
             {'id': ControlID.MENUBAR_MENU_ITEM_QUIT, 'title': u'退出', 'separator': False, 'IsShown': lambda : True}
             ]
@@ -278,7 +286,7 @@ class MainFrame(wx.Frame):
             {'id': ControlID.COLLECTION_LIST_MENU_RENAME, 'title': u"重命名"},
             {'id': ControlID.COLLECTION_LIST_MENU_EXPORT, 'title': u"导出", 'hasSub': True,
                 'sub' : [{'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_UTF8, 'title': u"导出为CHM(UTF-8)"},
-                         {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_GBK, 'title': u"导出为CHM(GBK)"},
+                         {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_GBK, 'title': u"导出为CHM(GBK)", 'IsShown': lambda : False},
                          {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_HTML, 'title': u"导出为HTML"}]},
             {'id': ControlID.COLLECTION_LIST_MENU_DELETE, 'title': u"删除"}
             ]
@@ -370,7 +378,7 @@ class MainFrame(wx.Frame):
         self.status_msg[False] = u'失败'
 
         # init task queue
-        self.taskExecutor = TaskExecutor(self.OnTaskFinish)
+        self.taskExecutor = TaskExecutor(self.OnTaskFinish, self.OnTaskProgress)
         self.taskExecutor.start()
 
         # create tmpfile
@@ -380,11 +388,32 @@ class MainFrame(wx.Frame):
         self.horizontalBoxSizer.Fit(self.panel)
         self.Layout()
         self.Center()
+
+    def SetStatusBarText(self, text):
+        if not self.statusBar.IsShown():
+            self.statusBar.Show()
+            self.UpdaetMenuBarMenu()
+            self.SendSizeEvent()
+        self.statusBar.setText(text)
+
+    def OnTaskProgress(self, status):
+        wx.CallAfter(self.ProcProgessMsg, status)
+
+    def ProcProgessMsg(self, status):
+        self.SetStatusBarText(u"正在处理: " +status['msg'])
+        
     def OnTaskFinish(self, status, taskItem):
-        wx.CallAfter(self.ProcTaskFinish, status, taskItem)
-        # if taskItem['action']['id'] == 2000:  # 取消收藏
-        # elif taskItem['action']['id'] == 2002:  # 移动
-        # elif taskItem['action']['id'] == 2002:  # 复制
+        if taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_DELETE:
+            wx.CallAfter(self.ProcTaskFinish, status, taskItem)
+        elif taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START:
+            wx.CallAfter(self.ProcTaskFinish, status, taskItem)
+        elif taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START:
+            wx.CallAfter(self.ProcTaskFinish, status, taskItem)
+        elif taskItem['action']['id'] == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML:
+            wx.CallAfter(self.ProcExportFinish, status, taskItem)
+        elif taskItem['action']['id'] == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8:
+            wx.CallAfter(self.ProcExportFinish, status, taskItem)
+
     def ProcTaskFinish(self, status, taskItem):
         answer_string = "回答编号:%s(%s),作者:%s,问题标题:%s,编号:%s(%s),收藏夹名称:%s,编号:%s(%s)" % (
             taskItem['selected_answer']['answer_id'], u'http://www.zhihu.com/answer/%s' % taskItem['selected_answer']['answer_id_url'], taskItem['selected_answer']['author_name'],
@@ -397,7 +426,15 @@ class MainFrame(wx.Frame):
 
         if taskItem in self.tasklist_items:
             taskItem['status'] = self.status_msg[status['status']]
+            self.SetStatusBarText(u"%s%s %s" % (taskItem['status'], taskItem['action']['name'], taskItem['col2']))
         self.UpdateTaskList()
+
+    def ProcExportFinish(self, status, taskItem):
+        if taskItem in self.tasklist_items:
+            taskItem['status'] = self.status_msg[status['status']]
+            self.SetStatusBarText(u"%s导出 %s" % (taskItem['status'], taskItem['col2']))
+        self.UpdateTaskList()
+
     def __del__(self):
         os.removedirs(self.temp_dir_path)
         self.taskExecutor.stop()
@@ -463,19 +500,54 @@ class MainFrame(wx.Frame):
             self.SendSizeEvent()
             #wx.PostEvent(self.GetEventHandler(), wx.SizeEvent(self.GetSize(), self.GetId()))
         elif id == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8:
-            pass
+            collections = list(Utils.getUserCollectionList())
+            action = { 'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8, 'name': u'导出收藏(CHM)'}
+            self.AddTaskItem(action, export_collections=collections)
+            self.UpdateTaskList()
         elif id == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_GBK:
             pass
         elif id == ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML:
             collections = list(Utils.getUserCollectionList())
-            self.ExportCollections(collections)
+            action = { 'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML, 'name': u'导出收藏'}
+            self.AddTaskItem(action, export_collections=collections)
+            self.UpdateTaskList()
 
-    def AddTaskItem(self, action, selected_answer, from_collection_info, dest_collecion_info=None):
+    def AddTaskItem(self, action, selected_answer=None, from_collection_info=None, dest_collecion_info=None, export_collections=None):
         item = {}
         item['action'] = action
         item['selected_answer'] = selected_answer
         item['from_collection_info'] = from_collection_info
         item['dest_collecion_info'] = dest_collecion_info
+        item['export_collections'] = export_collections
+        item['col2'] = ""
+        item['col3'] = ""
+        item['col4'] = ""
+
+        switch_group1 = [
+                        ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START,
+                        ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START
+                        ]
+        switch_group2 = [
+                        ControlID.ANSWER_LIST_MENU_BROWSE_DELETE
+                        ]
+        switch_group3 = [
+                        ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML
+                        ]
+        if action['id'] in switch_group1:
+            item['col2'] = u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary'])
+            item['col3'] = item['from_collection_info']['title']
+        elif action['id'] in switch_group2:
+            item['col2'] = u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary'])
+            item['col3'] = item['from_collection_info']['title']
+            item['col4'] = item['dest_collecion_info']['title']
+        elif action['id'] in switch_group3:
+            fname = ""
+            if len(export_collections) > 1:
+                fname = u"%s,%s等%d个收藏夹" % (export_collections[0]['title'], export_collections[1]['title'], len(export_collections))
+            else:
+                fname = export_collections[0]['title']
+            item['col2'] = fname
+
         self.tasklist_items.append(item)
         #logger.info("item added: %s" % item)
         self.taskExecutor.add_task(item)
@@ -489,13 +561,11 @@ class MainFrame(wx.Frame):
                 self.ListCtrl_TaskList.SetStringItem(index, 1, item['status'])
             else:
                 self.ListCtrl_TaskList.SetStringItem(index, 1, "")
-            self.ListCtrl_TaskList.SetStringItem(index, 2, u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary']))
-            self.ListCtrl_TaskList.SetStringItem(index, 3, item['from_collection_info']['title'])
-            if item['dest_collecion_info'] is not None:
-                self.ListCtrl_TaskList.SetStringItem(index, 4, item['dest_collecion_info']['title'])
-            else:
-                self.ListCtrl_TaskList.SetStringItem(index, 4, "")
+            self.ListCtrl_TaskList.SetStringItem(index, 2, item['col2'])
+            self.ListCtrl_TaskList.SetStringItem(index, 3, item['col3'])
+            self.ListCtrl_TaskList.SetStringItem(index, 4, item['col4'])
             self.TaskItemsDataMap[item['action']['name']] = item
+
         self.ListCtrl_TaskList.SetColumnWidth(0, wx.LIST_AUTOSIZE)
         self.ListCtrl_TaskList.SetColumnWidth(1, 40)
         self.ListCtrl_TaskList.SetColumnWidth(2, 230)
@@ -579,53 +649,6 @@ class MainFrame(wx.Frame):
         logger.info('OnCollectionListDoubleClick - %s' % selected_item)
         self.UpdateCollectionAnswersList(selected_item['collection_id'])
 
-    def ExportCollections(self, collection_items):
-        if len(collection_items) <= 0:
-            return {'status': False, 'msg': 'No items to be exported'}
-        fname = ""
-        if len(collection_items) > 1:
-            fname = u"%s,%s等%d个收藏夹" % (collection_items[0]['title'], collection_items[1]['title'], len(collection_items))
-        else:
-            fname = collection_items[0]['title']
-
-        base_dir = "./export"
-
-        html_navigator_directory_list = []
-        for collection_item in collection_items:
-            directory_info = self.ExportCollection(collection_item, base_dir)
-            html_navigator_directory_list.append(directory_info)
-
-        index_html = index_html_template.replace("{navigator_directory_list_items}", "".join([x['directory'] for x in html_navigator_directory_list]))
-        index_html = index_html.replace("{collection_title}", collection_items[0]['title'])
-        index_html = index_html.replace("{default_page}", "")
-        index_html = index_html.replace("{collection_set_title}", fname)
-
-        fname = "%s/%s.html" % (base_dir, fname)
-        with open(fname, "wb") as fhndl:
-             fhndl.write(index_html)
-
-        logger.info(u"导出成功 - %s" % fname)
-
-    def ExportCollection(self, collection, base_dir):
-        answerItems = Utils.getAnswersInCollection(collection['collection_id'])
-        html_navigator_list = []
-        all_pages_relative_path = []
-        for answerItem in answerItems:
-            status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['answer_id'], base_dir)
-            index_html_navigator = index_html_navigator_item_template.replace("{target_html_relative_path}", status['r'])
-            index_html_navigator = index_html_navigator.replace("{question_title}", answerItem['full_title'])
-            html_navigator_list.append(index_html_navigator)
-            all_pages_relative_path.append(status['fname'])
-
-        index_html_navigator_directory_item = index_html_navigator_directory_item_template.replace("{navigator_list_items}", "".join(html_navigator_list))
-        index_html_navigator_directory_item = index_html_navigator_directory_item.replace("{collection_title}", collection['title'])
-
-        default_page = ""
-        if len(all_pages_relative_path) > 0:
-            default_page = all_pages_relative_path[0]
-
-        return {'directory': index_html_navigator_directory_item, 'default': default_page }
-
     def OnCollectionListRightClick(self, event):
         self.ListCtrl_CollectionList_item_clicked = event.GetText()
 
@@ -679,7 +702,15 @@ class MainFrame(wx.Frame):
         elif event.GetId() == ControlID.COLLECTION_LIST_MENU_EXPORT_HTML:
             dummy_items = []
             dummy_items.append(selected_item)
-            self.ExportCollections(dummy_items)
+            action = { 'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML, 'name': u'导出收藏'}
+            self.AddTaskItem(action, export_collections=dummy_items)
+            self.UpdateTaskList()
+        elif event.GetId() == ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_UTF8:
+            dummy_items = []
+            dummy_items.append(selected_item)
+            action = { 'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8, 'name': u'导出收藏(CHM)'}
+            self.AddTaskItem(action, export_collections=dummy_items)
+            self.UpdateTaskList()
 
     def showMessageBox(self, text, caption="提示", style=wx.OK):
         dlg = wx.MessageDialog(None, text, caption, style)
