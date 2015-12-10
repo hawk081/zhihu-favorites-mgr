@@ -531,7 +531,8 @@ class MainFrame(wx.Frame):
                         ControlID.ANSWER_LIST_MENU_BROWSE_DELETE
                         ]
         switch_group3 = [
-                        ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML
+                        ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_HTML,
+                        ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8
                         ]
         if action['id'] in switch_group1:
             item['col2'] = u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary'])

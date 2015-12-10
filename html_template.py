@@ -70,7 +70,7 @@ zhihu_question_title_fld_template = r'''
 <h3 class="zm-item-title" style="{style}">
 <a href="http://www.zhihu.com/question/{question_id}" target="_blank">{question_title}</a>
  - 
-<a href="http://www.zhihu.com{author_url}" target="_blank">{author_name}</a>
+<a href="http://www.zhihu.com{author_url}" target="_blank">{author_name}的回答</a>
 </h3>
 <br />
 '''
