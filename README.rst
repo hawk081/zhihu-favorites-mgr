@@ -128,6 +128,9 @@ or
 + 导出为CHM
 .. image:: https://github.com/hawk081/zhihu-favorites-mgr/blob/master/screenshots/export_chm_review.png
 
++ 导出所有
+.. image:: https://github.com/hawk081/zhihu-favorites-mgr/blob/master/screenshots/main_menu.png
+
 + 查看所有导出结果
 .. image:: https://github.com/hawk081/zhihu-favorites-mgr/blob/master/screenshots/export_result.png
 
