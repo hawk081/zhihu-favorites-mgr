@@ -23,8 +23,8 @@ except:
 
 
 def get_captcha():
-    url = "http://www.zhihu.com/captcha.gif"
-    r = requests.get(url, params={"r": random.random()})
+    url = "https://www.zhihu.com/captcha.gif"
+    r = requests.get(url, params={"r": random.random()}, verify=False)
     if int(r.status_code) != 200:
         raise NetworkError(u"get captcha fail")
     image_name = u"captcha." + r.headers['content-type'].split("/")[1]
@@ -34,8 +34,8 @@ def get_captcha():
 
 
 def search_xsrf():
-    url = "http://www.zhihu.com/"
-    r = requests.get(url)
+    url = "https://www.zhihu.com/"
+    r = requests.get(url, verify=False)
     if int(r.status_code) != 200:
         return None
 
@@ -48,10 +48,10 @@ def search_xsrf():
 
 def login(account, password, xsrf, captcha):
     account_type = "phone_num"
-    url = "http://www.zhihu.com/login/phone_num"
+    url = "https://www.zhihu.com/login/phone_num"
     if re.match(r"^\S+\@\S+\.\S+$", account):
         account_type = "email"
-        url = "http://www.zhihu.com/login/email"
+        url = "https://www.zhihu.com/login/email"
 
     form = {account_type: account,
             "password": password,
@@ -62,13 +62,13 @@ def login(account, password, xsrf, captcha):
     headers = {
         'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36",
         'Host': "www.zhihu.com",
-        'Origin': "http://www.zhihu.com",
+        'Origin': "https://www.zhihu.com",
         'Pragma': "no-cache",
-        'Referer': "http://www.zhihu.com/",
+        'Referer': "https://www.zhihu.com/",
         'X-Requested-With': "XMLHttpRequest"
     }
 
-    r = requests.post(url, data=form, headers=headers)
+    r = requests.post(url, data=form, headers=headers, verify=False)
     if int(r.status_code) != 200:
         return {'status': False, 'msg': 'Login fail!'}
 
@@ -90,8 +90,8 @@ def login(account, password, xsrf, captcha):
 
 def islogin():
     # check session
-    url = "http://www.zhihu.com/settings/profile"
-    r = requests.get(url, allow_redirects=False)
+    url = "https://www.zhihu.com/settings/profile"
+    r = requests.get(url, allow_redirects=False, verify=False)
     status_code = int(r.status_code)
     if status_code == 301 or status_code == 302:
         # 未登录

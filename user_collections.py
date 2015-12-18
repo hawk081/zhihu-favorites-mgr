@@ -48,6 +48,14 @@ sys.setdefaultencoding('utf8')
 codecs.register(
     lambda name: codecs.lookup('utf-8') if name == 'cp65001' else None)
 
+headers = {
+    'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36",
+    'Host': "www.zhihu.com",
+    'Origin': "https://www.zhihu.com",
+    'Pragma': "no-cache",
+    'Referer': "https://www.zhihu.com/",
+    'X-Requested-With': "XMLHttpRequest"
+}
 
 class Collection:
     def __init__(self, href, title):
@@ -164,8 +172,8 @@ class CollectionGetter:
 class Utils:
     @staticmethod
     def search_xsrf():
-        url = "http://www.zhihu.com/"
-        r = zhihu_requests.get(url)
+        url = "https://www.zhihu.com/"
+        r = zhihu_requests.get(url, verify=False)
         if int(r.status_code) != 200:
             logger.error('fetch XSRF fail')
         results = re.compile(r"\<input\stype=\"hidden\"\sname=\"_xsrf\"\svalue=\"(\S+)\"", re.DOTALL).findall(r.text)
@@ -175,8 +183,83 @@ class Utils:
         return results[0]
 
     @staticmethod
+    def createCollection(title, is_public=False, description="" ):
+        if is_public:
+            is_public = 1
+        else:
+            is_public = 0
+
+        if description is None or len(description) <= 0:
+            description = -1
+
+        url = 'https://www.zhihu.com/collection/create'
+        form = {
+                'title': title,
+                'is_public': is_public,
+                'description': description,
+                'answer_id': 25523047,
+                '_xsrf': Utils.search_xsrf()}
+
+        r = zhihu_requests.post(url, data=form, headers=headers, verify=False)
+        if int(r.status_code) != 200:
+            logger.debug("createCollection fail %d!" % int(r.status_code))
+            return {'status': False, 'msg': r.status_code, 'extra': form}
+        s = json.loads(r.content)
+        if s['r'] != 0:
+            logger.debug("Error msg: %s" % s['msg'].decode('utf-8'))
+            return {'status': False, 'msg': s['msg'].decode('utf-8'), 'extra': form}
+        else:
+            logger.debug("createCollection success!")
+            # remove the temp answer id
+            msg = s['msg']
+            status = Utils.remove_favorite(25523047, msg[0])
+
+        return {'status': True, 'msg': 'success'}
+
+    @staticmethod
+    def deleteCollection(favlist_id):
+        url = 'https://www.zhihu.com/collection/delete'
+        form = {
+                'favlist_id': favlist_id,
+                '_xsrf': Utils.search_xsrf()}
+
+        r = zhihu_requests.post(url, data=form, headers=headers, verify=False)
+        if int(r.status_code) != 302 and int(r.status_code) != 200:
+            logger.debug("deleteCollection fail %d!" % int(r.status_code))
+            return {'status': False, 'msg': r.status_code, 'extra': form}
+
+        return {'status': True, 'msg': 'success'}
+
+    @staticmethod
+    def editCollection(title, favlist_id, is_public=False, description="" ):
+        if is_public:
+            is_public = 1
+        else:
+            is_public = 0
+
+        if description is None or len(description) <= 0:
+            description = -1
+
+        url = 'https://www.zhihu.com/collection/update'
+        form = {
+                'title': title,
+                'is_public': is_public,
+                'description': description,
+                'favlist_id': favlist_id,
+                '_xsrf': Utils.search_xsrf()}
+
+        r = zhihu_requests.post(url, data=form, headers=headers, verify=False)
+        if int(r.status_code) != 200:
+            logger.debug("editCollection fail %d!" % int(r.status_code))
+            return {'status': False, 'msg': r.status_code, 'extra': form}
+        else:
+            logger.debug("editCollection success!")
+
+        return {'status': True, 'msg': 'success'}
+
+    @staticmethod
     def getUserFavoriteList():
-        r = zhihu_requests.get("http://www.zhihu.com/collections/json?answer_id=20176787")
+        r = zhihu_requests.get("https://www.zhihu.com/collections/json?answer_id=20176787", verify=False)
         s = json.loads(r.content)
         for msg in s['msg']:
             for _msg in msg:
@@ -184,9 +267,10 @@ class Utils:
                     item = {}
                     item['favorite_id'] = _msg[0]
                     item['title'] = _msg[1]
-                    item['2'] = _msg[2]
+                    item['description'] = _msg[2]
                     item['3'] = _msg[3]
                     item['4'] = _msg[4]
+                    item['public'] = _msg[5]
                     yield item
 
     @staticmethod
@@ -195,7 +279,7 @@ class Utils:
 
     @staticmethod
     def getUserCollectionList():
-        r = zhihu_requests.get("http://www.zhihu.com/collections/mine")
+        r = zhihu_requests.get("https://www.zhihu.com/collections/mine", verify=False)
         soup = BeautifulSoup(r.content, 'html5lib')
         zm_items = soup.find_all("div", class_="zm-item")
         for zm_item in zm_items:
@@ -212,21 +296,47 @@ class Utils:
 
     @staticmethod
     def getAnswersInCollection(collection_id):
-        r = zhihu_requests.get("http://www.zhihu.com/collection/" + str(collection_id))
+        r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id), verify=False)
         soup = BeautifulSoup(r.content, 'html5lib')
-        zm_items = soup.find_all("div", class_="zm-item")
-        _collectionGetter = CollectionGetter()
-        for zm_item in zm_items:
-            zm_item_titles = zm_item.find_all("h2", class_="zm-item-title")
-            if len(zm_item_titles) > 0:
-                _collectionGetter.set_question(zm_item_titles[0])
-            zm_item_answers = zm_item.find_all("div", class_="zm-item-answer")
-            if len(zm_item_answers) > 0:
-                _collectionGetter.set_answer(zm_item_answers[0])
-            else:
-                continue
 
-            yield _collectionGetter.get_collection()
+        page_count = 1
+
+        zm_invite_pagers = soup.find_all("div", class_="zm-invite-pager")
+        if zm_invite_pagers is not None and len(zm_invite_pagers) > 0:
+            zm_invite_pager = zm_invite_pagers[0]
+            page_count = len(zm_invite_pager.find_all("span")) - 2 # 上一页/下一页
+
+        if page_count > 1:
+            for i in range(1, page_count + 1):
+                r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id) + "?page=%d" % i, verify=False)
+                soup = BeautifulSoup(r.content, 'html5lib')
+                zm_items = soup.find_all("div", class_="zm-item")
+                _collectionGetter = CollectionGetter()
+                for zm_item in zm_items:
+                    zm_item_titles = zm_item.find_all("h2", class_="zm-item-title")
+                    if len(zm_item_titles) > 0:
+                        _collectionGetter.set_question(zm_item_titles[0])
+                    zm_item_answers = zm_item.find_all("div", class_="zm-item-answer")
+                    if len(zm_item_answers) > 0:
+                        _collectionGetter.set_answer(zm_item_answers[0])
+                    else:
+                        continue
+
+                    yield _collectionGetter.get_collection()
+        else:
+            zm_items = soup.find_all("div", class_="zm-item")
+            _collectionGetter = CollectionGetter()
+            for zm_item in zm_items:
+                zm_item_titles = zm_item.find_all("h2", class_="zm-item-title")
+                if len(zm_item_titles) > 0:
+                    _collectionGetter.set_question(zm_item_titles[0])
+                zm_item_answers = zm_item.find_all("div", class_="zm-item-answer")
+                if len(zm_item_answers) > 0:
+                    _collectionGetter.set_answer(zm_item_answers[0])
+                else:
+                    continue
+
+                yield _collectionGetter.get_collection()
 
     @staticmethod
     def getTaskListColumns():
@@ -234,18 +344,10 @@ class Utils:
 
     @staticmethod
     def add_favorite(answer_id, favlist_id):
-        url = "http://www.zhihu.com/collection/add"
+        url = "https://www.zhihu.com/collection/add"
         form = {'answer_id': answer_id, 'favlist_id': favlist_id, '_xsrf': Utils.search_xsrf()}
-        headers = {
-            'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36",
-            'Host': "www.zhihu.com",
-            'Origin': "http://www.zhihu.com",
-            'Pragma': "no-cache",
-            'Referer': "http://www.zhihu.com/",
-            'X-Requested-With': "XMLHttpRequest"
-        }
 
-        r = zhihu_requests.post(url, data=form, headers=headers)
+        r = zhihu_requests.post(url, data=form, headers=headers, verify=False)
         s = json.loads(r.content)
         if int(r.status_code) != 200:
             logger.debug("add_favorite fail %d!" % int(r.status_code))
@@ -260,18 +362,10 @@ class Utils:
 
     @staticmethod
     def remove_favorite(answer_id, favlist_id):
-        url = "http://www.zhihu.com/collection/remove"
+        url = "https://www.zhihu.com/collection/remove"
         form = {'answer_id': answer_id, 'favlist_id': favlist_id, '_xsrf': Utils.search_xsrf()}
-        headers = {
-            'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36",
-            'Host': "www.zhihu.com",
-            'Origin': "http://www.zhihu.com",
-            'Pragma': "no-cache",
-            'Referer': "http://www.zhihu.com/",
-            'X-Requested-With': "XMLHttpRequest"
-        }
 
-        r = zhihu_requests.post(url, data=form, headers=headers)
+        r = zhihu_requests.post(url, data=form, headers=headers, verify=False)
         if int(r.status_code) != 200:
             logger.debug("remove_favorite fail %d!" % int(r.status_code))
             return {'status': False, 'msg': r.status_code, 'extra': form}
@@ -359,9 +453,6 @@ class Utils:
             status = True
             print "downloading %s " % fname
             try:
-                headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'
-                        }
                 r = requests.get(url, headers=headers, verify=False)
                 with open(fname, "wb") as fhndl:
                      fhndl.write(r.content)

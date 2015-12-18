@@ -42,6 +42,7 @@ logger = logging.getLogger("UserLog")
 ControlID = Enum([
 'MAX_SUBMENU_COUNT= 50',
 'MENUBAR_MENU_ITEM_REFRESH = 1000',
+'MENUBAR_MENU_ITEM_CREATE',
 'MENUBAR_MENU_ITEM_SHOW_STATUSBAR',
 'MENUBAR_MENU_ITEM_HIDE_STATUSBAR',
 'MENUBAR_MENU_ITEM_EXPORT_ALL',
@@ -67,7 +68,17 @@ ControlID = Enum([
 ])
 
 
-class LoginDialog(wx.Dialog):
+class BaseDialog(wx.Dialog):
+    def __init__(self, *args, **kwds):
+        wx.Dialog.__init__(self, *args, **kwds)
+
+    def showMessageBox(self, text, caption=u"提示", style=wx.OK):
+        dlg = wx.MessageDialog(None, text, caption, style)
+        if dlg.ShowModal() == wx.ID_YES:
+            self.Close(True)
+        dlg.Destroy()
+
+class LoginDialog(BaseDialog):
 
     def __init__(self):
         wx.Dialog.__init__(
@@ -163,11 +174,150 @@ class LoginDialog(wx.Dialog):
         self.refreshButton.SetLabel(u"刷新验证码")
         os.remove(image_name)
 
-    def showMessageBox(self, text, caption=u"提示", style=wx.OK):
-        dlg = wx.MessageDialog(None, text, caption, style)
-        if dlg.ShowModal() == wx.ID_YES:
-            self.Close(True)
-        dlg.Destroy()
+class CreateFavoriteDialog(BaseDialog):
+
+    def __init__(self, userCollections):
+        wx.Dialog.__init__(
+            self, None, -1, u'新建收藏夹',
+            style=wx.CAPTION | wx.CLOSE_BOX,
+            size=(400, 160))
+        self.SetIcon(images_icon.AppIcon.GetIcon())
+
+        self.panel = wx.Panel(self, -1)
+
+        self.basicLabel = wx.StaticText(self.panel, -1, u"收藏夹名称:", pos=(60, 15))
+        self.favorite_title = wx.TextCtrl(
+            self.panel,
+            -1,
+            u"",
+            size=(175, -1),
+            pos=(140, 10))
+        self.favorite_title.SetHint(u"输入收藏夹名称")
+        self.favorite_title.SetInsertionPoint(0)
+
+        self.descLabel = wx.StaticText(self.panel, -1, u"描述:", pos=(60, 45))
+        self.desc_text = wx.TextCtrl(
+            self.panel,
+            -1,
+            u"",
+            size=(175, -1),
+            pos=(140, 40))
+        self.desc_text.SetHint(u"输入描述")
+        self.desc_text.SetInsertionPoint(0)
+
+        self.public_radio = wx.RadioButton(self.panel, -1, u"公开", pos=(140, 70), style=wx.RB_GROUP)
+        self.private_radio = wx.RadioButton(self.panel, -1, u"私有", pos=(200, 70))
+
+        self.createButton = wx.Button(self.panel, -1, u"创建", pos=(150, 90))
+        self.Bind(wx.EVT_BUTTON, self.OnLoginButtonClick, self.createButton)
+        self.createButton.SetDefault()
+
+        self.userCollections = userCollections
+
+        self.Center()
+
+    def OnLoginButtonClick(self, event):
+        self.createButton.SetLabel(u"创建中...")
+        title = self.favorite_title.GetValue()
+        is_public = self.public_radio.GetValue()
+        description = self.desc_text.GetValue()
+        if title is None or len(title) <= 0:
+            self.showMessageBox(u'收藏夹名称不能为空!')
+            self.createButton.SetLabel(u"创建")
+            return
+
+        for collection in self.userCollections:
+            if cmp(collection['title'], title) == 0:
+                self.showMessageBox(u'收藏夹[%s]已存在!' % title)
+                self.createButton.SetLabel(u"创建")
+                return
+
+        result = Utils.createCollection(title, is_public, description)
+        if result['status']:
+            self.showMessageBox(u'创建成功')
+            self.EndModal(wx.ID_OK)
+        else:
+            self.showMessageBox(u'创建失败')
+        self.createButton.SetLabel(u"创建")
+
+class EditFavoriteDialog(BaseDialog):
+
+    def __init__(self, collection, userCollections):
+        self.currentCollection = collection
+        self.userCollections = userCollections
+
+        wx.Dialog.__init__(
+            self, None, -1, u'编辑收藏夹',
+            style=wx.CAPTION | wx.CLOSE_BOX,
+            size=(400, 160))
+        self.SetIcon(images_icon.AppIcon.GetIcon())
+
+        self.panel = wx.Panel(self, -1)
+
+        self.basicLabel = wx.StaticText(self.panel, -1, u"收藏夹名称:", pos=(60, 15))
+        self.favorite_title = wx.TextCtrl(
+            self.panel,
+            -1,
+            u"",
+            size=(175, -1),
+            pos=(140, 10))
+        self.favorite_title.SetHint(u"输入收藏夹名称")
+        self.favorite_title.SetInsertionPoint(0)
+        self.favorite_title.SetValue(self.currentCollection['title'])
+
+        self.descLabel = wx.StaticText(self.panel, -1, u"描述:", pos=(60, 45))
+        self.desc_text = wx.TextCtrl(
+            self.panel,
+            -1,
+            u"",
+            size=(175, -1),
+            pos=(140, 40))
+        self.desc_text.SetHint(u"输入描述")
+        self.desc_text.SetInsertionPoint(0)
+        print self.currentCollection
+        self.desc_text.SetValue(self.currentCollection['favorite_info']['description'])
+
+        self.public_radio = wx.RadioButton(self.panel, -1, u"公开", pos=(140, 70), style=wx.RB_GROUP)
+        self.private_radio = wx.RadioButton(self.panel, -1, u"私有", pos=(200, 70))
+
+        if self.currentCollection['favorite_info']['public']:
+            self.public_radio.SetValue(True)
+            self.public_radio.Enable(False)
+            self.private_radio.SetValue(False)
+            self.private_radio.Enable(False)
+        else:
+            self.public_radio.SetValue(False)
+            self.private_radio.SetValue(True)
+
+        self.createButton = wx.Button(self.panel, -1, u"修改", pos=(150, 90))
+        self.Bind(wx.EVT_BUTTON, self.OnLoginButtonClick, self.createButton)
+        self.createButton.SetDefault()
+
+        self.Center()
+
+    def OnLoginButtonClick(self, event):
+        self.createButton.SetLabel(u"修改中...")
+        title = self.favorite_title.GetValue()
+        is_public = self.public_radio.GetValue()
+        description = self.desc_text.GetValue()
+        if title is None or len(title) <= 0:
+            self.showMessageBox(u'收藏夹名称不能为空!')
+            self.createButton.SetLabel(u"修改")
+            return
+
+        for collection in self.userCollections:
+            if cmp(collection['title'], title) == 0 and self.currentCollection['favorite_info']['favorite_id'] != collection['favorite_info']['favorite_id']:
+                self.showMessageBox(u'收藏夹[%s]已存在!' % title)
+                self.createButton.SetLabel(u"修改")
+                return
+
+        result = Utils.editCollection(title, self.currentCollection['favorite_info']['favorite_id'], is_public, description)
+        if result['status']:
+            self.showMessageBox(u'修改成功')
+            self.EndModal(wx.ID_OK)
+        else:
+            self.showMessageBox(u'修改失败')
+        self.createButton.SetLabel(u"修改")
 
 class Singleton(object):
     def __new__(cls,*args,**kwargs):
@@ -267,6 +417,7 @@ class MainFrame(wx.Frame):
 
         self.menuBar_menubar_menu_items = [
             {'id': ControlID.MENUBAR_MENU_ITEM_REFRESH, 'title': u'刷新', 'separator': True, 'IsShown': lambda : True},
+            {'id': ControlID.MENUBAR_MENU_ITEM_CREATE, 'title': u'新建收藏夹', 'separator': True, 'IsShown': lambda : True},
             {'id': ControlID.MENUBAR_MENU_ITEM_SHOW_STATUSBAR, 'title': u'隐藏状态栏', 'separator': True, 'IsShown': lambda : self.statusBar.IsShown()},
             {'id': ControlID.MENUBAR_MENU_ITEM_HIDE_STATUSBAR, 'title': u'显示状态栏', 'separator': True, 'IsShown': lambda : not self.statusBar.IsShown()},
             {'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL, 'title': u'导出所有', 'separator': True, 'IsShown': lambda : True,
@@ -283,7 +434,7 @@ class MainFrame(wx.Frame):
 
         self.collections_menu_itemms = [
             {'id': ControlID.COLLECTION_LIST_MENU_OPEN, 'title': u"打开"},
-            {'id': ControlID.COLLECTION_LIST_MENU_RENAME, 'title': u"重命名"},
+            {'id': ControlID.COLLECTION_LIST_MENU_RENAME, 'title': u"编辑收藏夹"},
             {'id': ControlID.COLLECTION_LIST_MENU_EXPORT, 'title': u"导出", 'hasSub': True,
                 'sub' : [{'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_UTF8, 'title': u"导出为CHM(UTF-8)"},
                          {'id': ControlID.COLLECTION_LIST_MENU_EXPORT_CHM_GBK, 'title': u"导出为CHM(GBK)", 'IsShown': lambda : False},
@@ -296,6 +447,11 @@ class MainFrame(wx.Frame):
             self.panel,
             -1,
             style=wx.LC_REPORT)
+
+        self.ListCtrl_CollectionList_imgs = wx.ImageList(16, 16, True)
+        self.ListCtrl_CollectionList_imgs.Add(images_icon.LockIcon.GetBitmap())
+        self.ListCtrl_CollectionList.AssignImageList(self.ListCtrl_CollectionList_imgs, wx.IMAGE_LIST_SMALL)
+
         wx.EVT_LIST_ITEM_RIGHT_CLICK(
             self.ListCtrl_CollectionList,
             -1,
@@ -476,7 +632,6 @@ class MainFrame(wx.Frame):
             for fav in self.userFavorites:
                 if cmp(coll['title'], fav['title']) == 0:
                     coll['favorite_info'] = fav
-
         self.UpdateCollectionList()
         self.UpdateFavoriteList()
 
@@ -489,6 +644,11 @@ class MainFrame(wx.Frame):
             self.OnMenuRefresh()
             # clear answer list
             self.ListCtrl_CollectionAnswersList.DeleteAllItems()
+        elif id == ControlID.MENUBAR_MENU_ITEM_CREATE:
+            dlg = CreateFavoriteDialog(self.userCollections)
+            if wx.ID_OK == dlg.ShowModal():
+                self.OnMenuRefresh()
+            dlg.Destroy()
         elif id == ControlID.MENUBAR_MENU_ITEM_SHOW_STATUSBAR:
             self.statusBar.Hide()
             self.UpdaetMenuBarMenu()
@@ -641,6 +801,8 @@ class MainFrame(wx.Frame):
         self.ListCtrl_CollectionList.DeleteAllItems()
         for item in self.userCollections:
             index = self.ListCtrl_CollectionList.InsertStringItem(sys.maxint, item['title'])
+            if not item['favorite_info']['public']:
+                self.ListCtrl_CollectionList.SetItemImage(index, 0, 0)
             self.collectionsItemsDataMap[item['title']] = item
         self.ListCtrl_CollectionList.SetColumnWidth(0, 175)  # wx.LIST_AUTOSIZE
 
@@ -712,6 +874,21 @@ class MainFrame(wx.Frame):
             action = { 'id': ControlID.MENUBAR_MENU_ITEM_EXPORT_ALL_CHM_UTF8, 'name': u'导出收藏(CHM)'}
             self.AddTaskItem(action, export_collections=dummy_items)
             self.UpdateTaskList()
+        elif event.GetId() == ControlID.COLLECTION_LIST_MENU_DELETE:
+            dlg = wx.MessageDialog(None, u"确认删除[%s]?" % selected_item['title'], u"提示", style=wx.OK)
+            if dlg.ShowModal() == wx.ID_YES:
+                self.Close(True)
+                result = Utils.deleteCollection(selected_item['favorite_info']['favorite_id'])
+                if result['status']:
+                    self.OnMenuRefresh()
+                    self.showMessageBox(u"删除收藏夹成功")
+                else:
+                    self.showMessageBox(u"删除收藏夹失败")
+        elif event.GetId() == ControlID.COLLECTION_LIST_MENU_RENAME:
+            dlg = EditFavoriteDialog(selected_item, self.userCollections)
+            if wx.ID_OK == dlg.ShowModal():
+                self.OnMenuRefresh()
+            dlg.Destroy()
 
     def showMessageBox(self, text, caption="提示", style=wx.OK):
         dlg = wx.MessageDialog(None, text, caption, style)
