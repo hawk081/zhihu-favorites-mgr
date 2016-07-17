@@ -53,8 +53,7 @@ headers = {
     'Host': "www.zhihu.com",
     'Origin': "https://www.zhihu.com",
     'Pragma': "no-cache",
-    'Referer': "https://www.zhihu.com/",
-    'X-Requested-With': "XMLHttpRequest"
+    'Referer': "https://www.zhihu.com/"
 }
 
 class Collection:
@@ -108,11 +107,16 @@ class CollectionGetter:
                     # print content.decode('utf-8').encode('gbk')
                     if(len(content.strip()) > 0):
                         self.answer_summary += content.strip()
-        hidden_contents = zm_item_answer.find_all("textarea", class_="content hidden")
+        hidden_contents = zm_item_answer.find_all("textarea", class_="content")
         self.contents = ""
         if len(hidden_contents) > 0:
             textarea_hidden_content = hidden_contents[0]
             textarea_hidden_content.name = "div"
+            
+            # remove all unnecessary attributes
+            kyes = [ k for k in textarea_hidden_content.attrs]
+            for attr in kyes:
+                del textarea_hidden_content[attr]
             textarea_hidden_content['class'] = "content"
             textarea_hidden_content['style'] = "width:780px;margin-left:auto;margin-right:auto;"
 
@@ -124,6 +128,8 @@ class CollectionGetter:
             textarea_hidden_content['style'] = "width:780px;margin:10px;"
             self.chm_contents = textarea_hidden_content.prettify()
             self.chm_contents = h.unescape(self.chm_contents)
+        else:
+            print 'hidden_contents\'s length is 0'
 
     def get_collection(self):
         answer = {}
@@ -259,7 +265,7 @@ class Utils:
 
     @staticmethod
     def getUserFavoriteList():
-        r = zhihu_requests.get("https://www.zhihu.com/collections/json?answer_id=20176787", verify=False)
+        r = zhihu_requests.get("https://www.zhihu.com/collections/json?answer_id=20176787", verify=False, headers=headers)
         s = json.loads(r.content)
         for msg in s['msg']:
             for _msg in msg:
@@ -279,7 +285,7 @@ class Utils:
 
     @staticmethod
     def getUserCollectionList():
-        r = zhihu_requests.get("https://www.zhihu.com/collections/mine", verify=False)
+        r = zhihu_requests.get("https://www.zhihu.com/collections/mine", headers=headers, verify=False)
         soup = BeautifulSoup(r.content, 'html5lib')
         zm_items = soup.find_all("div", class_="zm-item")
         for zm_item in zm_items:
@@ -296,7 +302,7 @@ class Utils:
 
     @staticmethod
     def getAnswersInCollection(collection_id):
-        r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id), verify=False)
+        r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id), headers=headers, verify=False)
         soup = BeautifulSoup(r.content, 'html5lib')
 
         page_count = 1
@@ -308,7 +314,7 @@ class Utils:
 
         if page_count > 1:
             for i in range(1, page_count + 1):
-                r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id) + "?page=%d" % i, verify=False)
+                r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id) + "?page=%d" % i, headers=headers, verify=False)
                 soup = BeautifulSoup(r.content, 'html5lib')
                 zm_items = soup.find_all("div", class_="zm-item")
                 _collectionGetter = CollectionGetter()
@@ -451,9 +457,9 @@ class Utils:
     def download_res(url, dir):
         def download(url, fname):
             status = True
-            print "downloading %s " % fname
+            print "downloading %s from %s" % (fname, url)
             try:
-                r = requests.get(url, headers=headers, verify=False)
+                r = requests.get(url, verify=False)
                 with open(fname, "wb") as fhndl:
                      fhndl.write(r.content)
             except Exception,e:

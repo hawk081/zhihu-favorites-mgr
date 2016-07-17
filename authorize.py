@@ -21,11 +21,20 @@ try:
 except:
     pass
 
+headers = {
+    'User-Agent': "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36",
+    'Host': "www.zhihu.com",
+    'Origin': "https://www.zhihu.com",
+    'Pragma': "no-cache",
+    'Referer': "https://www.zhihu.com/",
+    'X-Requested-With': "XMLHttpRequest"
+}
 
 def get_captcha():
     url = "https://www.zhihu.com/captcha.gif"
-    r = requests.get(url, params={"r": random.random()}, verify=False)
+    r = requests.get(url, headers=headers, params={"r": random.random()}, verify=False)
     if int(r.status_code) != 200:
+        print r.status_code
         raise NetworkError(u"get captcha fail")
     image_name = u"captcha." + r.headers['content-type'].split("/")[1]
     open(image_name, "wb").write(r.content)
@@ -88,16 +97,17 @@ def login(account, password, xsrf, captcha):
         return {"status": False, 'msg': "Unknown error!"}
 
 
+
 def islogin():
     # check session
     url = "https://www.zhihu.com/settings/profile"
-    r = requests.get(url, allow_redirects=False, verify=False)
+    r = requests.get(url, headers=headers, allow_redirects=False, verify=False)
     status_code = int(r.status_code)
+    print 'status_code %d' % status_code
     if status_code == 301 or status_code == 302:
         # 未登录
         return False
     elif status_code == 200:
         return True
     else:
-        Logging.warn('Error')
         return None

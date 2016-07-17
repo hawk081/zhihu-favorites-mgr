@@ -56,7 +56,7 @@ zhihu_page_header = '''
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 <meta name="renderer" content="webkit">
 <title>{question_title}</title>
-<link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.7fde691e.css">
+<link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.086bef53.css">
 </head>
 <body style='align:center;'>
 {question_title_fld}

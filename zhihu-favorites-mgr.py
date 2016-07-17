@@ -585,6 +585,11 @@ class MainFrame(wx.Frame):
             self.SetStatusBarText(u"%s%s %s" % (taskItem['status'], taskItem['action']['name'], taskItem['col2']))
         self.UpdateTaskList()
 
+        if taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START:
+            self.DeleteAnswerFromAnswerList(taskItem['selected_answer']['answer_id'])
+        elif taskItem['action']['id'] == ControlID.ANSWER_LIST_MENU_BROWSE_DELETE:
+            self.DeleteAnswerFromAnswerList(taskItem['selected_answer']['answer_id'])
+
     def ProcExportFinish(self, status, taskItem):
         if taskItem in self.tasklist_items:
             taskItem['status'] = self.status_msg[status['status']]
@@ -628,10 +633,12 @@ class MainFrame(wx.Frame):
         # refresh
         self.userCollections = list(Utils.getUserCollectionList())
         self.userFavorites = list(Utils.getUserFavoriteList())
+        print 'len: %d' % len(self.userFavorites)
         for coll in self.userCollections:
             for fav in self.userFavorites:
                 if cmp(coll['title'], fav['title']) == 0:
                     coll['favorite_info'] = fav
+                    print coll, fav
         self.UpdateCollectionList()
         self.UpdateFavoriteList()
 
@@ -697,10 +704,11 @@ class MainFrame(wx.Frame):
         if action['id'] in switch_group1:
             item['col2'] = u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary'])
             item['col3'] = item['from_collection_info']['title']
+            item['col4'] = item['dest_collecion_info']['title']
         elif action['id'] in switch_group2:
             item['col2'] = u"%s回答的关于 %s:%s" % (item['selected_answer']['author_name'], item['selected_answer']['question_title'], item['selected_answer']['answer_summary'])
             item['col3'] = item['from_collection_info']['title']
-            item['col4'] = item['dest_collecion_info']['title']
+            #item['col4'] = item['dest_collecion_info']['title']
         elif action['id'] in switch_group3:
             fname = ""
             if len(export_collections) > 1:
@@ -709,7 +717,7 @@ class MainFrame(wx.Frame):
                 fname = export_collections[0]['title']
             item['col2'] = fname
 
-        self.tasklist_items.append(item)
+        self.tasklist_items.insert(0, item)
         #logger.info("item added: %s" % item)
         self.taskExecutor.add_task(item)
 
@@ -734,9 +742,13 @@ class MainFrame(wx.Frame):
         self.ListCtrl_TaskList.SetColumnWidth(4, wx.LIST_AUTOSIZE)
 
     def UpdateCollectionAnswersList(self, collection_id):
+        self.Current_Shown_Answers = list(Utils.getAnswersInCollection(collection_id))
+        self.BuildCollectionAnswersList(self.Current_Shown_Answers)
+
+    def BuildCollectionAnswersList(self, answers):
         self.AnswersItemsDataMap = {}
         self.ListCtrl_CollectionAnswersList.DeleteAllItems()
-        for item in Utils.getAnswersInCollection(collection_id):
+        for item in answers:
             index = self.ListCtrl_CollectionAnswersList.InsertStringItem(sys.maxint, item['answer_id'])
             self.ListCtrl_CollectionAnswersList.SetStringItem(index, 1, item['question_title'])
             self.ListCtrl_CollectionAnswersList.SetStringItem(index, 2, item['author_name'])
@@ -747,8 +759,28 @@ class MainFrame(wx.Frame):
         self.ListCtrl_CollectionAnswersList.SetColumnWidth(2, wx.LIST_AUTOSIZE)
         self.ListCtrl_CollectionAnswersList.SetColumnWidth(3, wx.LIST_AUTOSIZE)
 
+    def DeleteAnswerFromAnswerList(self, answer_id):
+        itemToBeDeleted = None
+        for item in self.Current_Shown_Answers:
+            if cmp(item['answer_id'], answer_id) == 0:
+                itemToBeDeleted = item
+        if itemToBeDeleted is not None:
+            self.Current_Shown_Answers.remove(itemToBeDeleted)
+            self.BuildCollectionAnswersList(self.Current_Shown_Answers)
+
     def GetSelectedAnswer(self):
         return self.AnswersItemsDataMap[self.ListCtrl_CollectionAnswersList_item_clicked]
+
+    def GetSelectedAnswers(self):
+        selected_answers = []
+        current_item_idx = -1
+        while True:
+            current_item_idx = self.ListCtrl_CollectionAnswersList.GetNextSelected(current_item_idx)
+            if current_item_idx != -1:
+                selected_answers.append(self.AnswersItemsDataMap[self.ListCtrl_CollectionAnswersList.GetItemText(current_item_idx)])
+            else:
+                break
+        return selected_answers
 
     def GetSelectedCollection(self):
         return self.collectionsItemsDataMap[self.ListCtrl_CollectionList_item_clicked]
@@ -777,23 +809,23 @@ class MainFrame(wx.Frame):
             self.showHtml2(selected_answer['full_page'], selected_answer['full_title'])
         elif event.GetId() == ControlID.ANSWER_LIST_MENU_BROWSE_DELETE:
             action = { 'id': event.GetId(), 'name': u'取消收藏'}
-            selected_answer = self.GetSelectedAnswer()
-            self.from_collection_info = self.GetSelectedCollection()
-            self.AddTaskItem(action, selected_answer, self.from_collection_info)
+            from_collection_info = self.GetSelectedCollection()
+            for selected_answer in self.GetSelectedAnswers():
+                self.AddTaskItem(action, selected_answer, from_collection_info)
             self.UpdateTaskList()
         elif ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START <= event.GetId() < ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_END:
             action = { 'id': ControlID.ANSWER_LIST_MENU_BROWSE_COPY_SUBMENU_START, 'name': u'复制'}
-            selected_answer = self.GetSelectedAnswer()
             from_collection_info = self.GetSelectedCollection()
             dest_collecion_info = item['data']
-            self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
+            for selected_answer in self.GetSelectedAnswers():
+                self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
             self.UpdateTaskList()
         elif ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START <= event.GetId() < ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_END:
             action = { 'id': ControlID.ANSWER_LIST_MENU_BROWSE_MOVE_SUBMENU_START, 'name': u'移动'}
-            selected_answer = self.GetSelectedAnswer()
             from_collection_info = self.GetSelectedCollection()
             dest_collecion_info = item['data']
-            self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
+            for selected_answer in self.GetSelectedAnswers():
+                self.AddTaskItem(action, selected_answer, from_collection_info, dest_collecion_info)
             self.UpdateTaskList()
 
     def UpdateCollectionList(self):
