@@ -56,21 +56,69 @@ zhihu_page_header = '''
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
 <meta name="renderer" content="webkit">
 <title>{question_title}</title>
-<link rel="stylesheet" href="http://static.zhihu.com/static/revved/-/css/z.086bef53.css">
+<link rel="stylesheet" href="{stylesheet_uri}">
+<style type="text/css">
+* {
+    margin:0;
+    padding:0;
+}
+@media screen and (min-width:840px){
+    .content_inner {
+        position: relative;
+        display: block;
+        width: 780px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .content_outter {
+        position: relative;
+        display: block;
+        width: 820px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+@media screen and (min-width:300px) and (max-width:830px) {
+    .content_inner {
+        position: relative;
+        display: block;
+        margin-left: 18px;
+        margin-right: 18px;
+    }
+    .content_outter {
+        position: relative;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+</style>
 </head>
 <body style='align:center;'>
+<div class="content_outter">
 {question_title_fld}
 {answer_content}
+</div>
 </body>
 </html>
 '''
 
 zhihu_question_title_fld_template = r'''
 <br />
-<h3 class="zm-item-title" style="{style}">
+<h3 class="zm-item-title content_inner">
 <a href="http://www.zhihu.com/question/{question_id}" target="_blank">{question_title}</a>
  - 
 <a href="http://www.zhihu.com{author_url}" target="_blank">{author_name}的回答</a>
+</h3>
+<br />
+'''
+
+zhihu_post_title_fld_template = r'''
+<br />
+<h3 class="zm-item-title content_inner">
+<a href="http://zhuanlan.zhihu.com/p/{question_id}" target="_blank">{question_title}</a>
+ - 
+<a href="http://www.zhihu.com{author_url}" target="_blank">{author_name}的文章</a>
 </h3>
 <br />
 '''

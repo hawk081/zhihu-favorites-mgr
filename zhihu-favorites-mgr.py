@@ -633,12 +633,10 @@ class MainFrame(wx.Frame):
         # refresh
         self.userCollections = list(Utils.getUserCollectionList())
         self.userFavorites = list(Utils.getUserFavoriteList())
-        print 'len: %d' % len(self.userFavorites)
         for coll in self.userCollections:
             for fav in self.userFavorites:
                 if cmp(coll['title'], fav['title']) == 0:
                     coll['favorite_info'] = fav
-                    print coll, fav
         self.UpdateCollectionList()
         self.UpdateFavoriteList()
 

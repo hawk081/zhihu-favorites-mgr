@@ -11,6 +11,7 @@ import cookielib
 import codecs
 import HTMLParser
 import traceback
+import urllib
 
 # requirements
 import requests
@@ -73,6 +74,10 @@ class Collection:
 class CollectionGetter:
     def __init__(self):
         self.question_title = ""
+        self.stylesheet_uri = ""
+
+    def set_stylesheet_uri(self, stylesheet_uri):
+        self.stylesheet_uri = stylesheet_uri
 
     def set_question(self, zm_item_title):
         if zm_item_title is not None and hasattr(zm_item_title, 'a'):
@@ -80,7 +85,59 @@ class CollectionGetter:
             href = zm_item_title.a['href']
             self.question_id = href[href.rindex('/') + 1:]
 
+    def set_post(self, zm_item_post):
+        self.type = "post"
+        meta_post_url_token = zm_item_post.find_all("meta", attrs={"itemprop": "post-url-token"})[0]
+        div_post_content = zm_item_post.find_all("div", class_="post-content")[0]
+        a_author_link = zm_item_post.find_all("a", class_="author-link")[0]
+
+        self.answer_id = meta_post_url_token['content']
+        self.answer_id_url = div_post_content['data-entry-url']
+        self.author_id = ""
+        self.author_name = div_post_content['data-author-name']
+        self.author_url = a_author_link['href']
+
+        self.question_id = self.answer_id
+
+        zh_summarys = zm_item_post.find_all(
+            "div",
+            class_="zh-summary summary clearfix")
+        self.answer_summary = ""
+        if len(zh_summarys) > 0:
+            # print hasattr(zh_summarys[0], "img") and zh_summarys[0].img != None
+            for content in zh_summarys[0].contents:
+                if type(content) == bs4.element.NavigableString:
+                    # print content.decode('utf-8').encode('gbk')
+                    if(len(content.strip()) > 0):
+                        self.answer_summary += content.strip()
+
+        hidden_contents = zm_item_post.find_all("textarea", class_="content")
+        self.contents = ""
+        if len(hidden_contents) > 0:
+            textarea_hidden_content = hidden_contents[0]
+
+            textarea_hidden_content.name = "div"
+            textarea_hidden_content['class'] = "content content_inner"
+            #textarea_hidden_content['style'] = "width:780px;margin-left:auto;margin-right:auto;"
+            
+            self.contents = textarea_hidden_content.prettify()
+            h = HTMLParser.HTMLParser()
+            self.contents = h.unescape(self.contents).replace("hidden=\"\"", "")
+            self.contents = self.process_img(self.contents)
+
+            #add content_inner class
+            self.contents = self.contents.replace("<div class=\"content\">", "<div class=\"content content_inner\">")
+
+            # html for chm
+            textarea_hidden_content['style'] = "width:780px;margin:10px;"
+            self.chm_contents = textarea_hidden_content.prettify()
+            self.chm_contents = h.unescape(self.chm_contents).replace("hidden=\"\"", "")
+            self.chm_contents = self.process_img(self.chm_contents)
+        else:
+            print 'hidden_contents\'s length is 0'
+
     def set_answer(self, zm_item_answer):
+        self.type = "answer"
         self.answer_id = zm_item_answer['data-aid']
         self.answer_id_url = zm_item_answer['data-atoken']
         self.author_id = zm_item_answer['data-created']
@@ -111,27 +168,55 @@ class CollectionGetter:
         self.contents = ""
         if len(hidden_contents) > 0:
             textarea_hidden_content = hidden_contents[0]
-            textarea_hidden_content.name = "div"
-            
-            # remove all unnecessary attributes
-            kyes = [ k for k in textarea_hidden_content.attrs]
-            for attr in kyes:
-                del textarea_hidden_content[attr]
-            textarea_hidden_content['class'] = "content"
-            textarea_hidden_content['style'] = "width:780px;margin-left:auto;margin-right:auto;"
 
+            textarea_hidden_content.name = "div"
+            textarea_hidden_content['class'] = "content content_inner"
+            #textarea_hidden_content['style'] = "width:780px;margin-left:auto;margin-right:auto;"
+            
             self.contents = textarea_hidden_content.prettify()
             h = HTMLParser.HTMLParser()
-            self.contents = h.unescape(self.contents)
+            self.contents = h.unescape(self.contents).replace("hidden=\"\"", "")
+            self.contents = self.process_img(self.contents)
+
+            #add content_inner class
+            self.contents = self.contents.replace("<div class=\"content\">", "<div class=\"content content_inner\">")
 
             # html for chm
             textarea_hidden_content['style'] = "width:780px;margin:10px;"
             self.chm_contents = textarea_hidden_content.prettify()
-            self.chm_contents = h.unescape(self.chm_contents)
+            self.chm_contents = h.unescape(self.chm_contents).replace("hidden=\"\"", "")
+            self.chm_contents = self.process_img(self.chm_contents)
         else:
             print 'hidden_contents\'s length is 0'
 
+    def process_img(self, content):
+        res_re_obj = re.compile(r"(<img.*?(\s+width\s*=\s*\"(\d+)\").*?>)")
+        data_original_res_re_obj = re.compile(r"<img.*?\s+data-original=\"(.*?)\".*?>")
+
+        results = res_re_obj.findall(content)
+        if results:
+            for result in results:
+                data_original_results = data_original_res_re_obj.findall(result[0])
+                if data_original_results and len(data_original_results) == 1:
+                    repl_str = "src=\"{}\"".format(data_original_results[0])
+                    new_img_item = re.sub(pattern=r"src=\".*?\"", repl=repl_str, string=result[0])
+                    rease_data_original_str = "data-original=\"{}\"".format(data_original_results[0])
+                    new_img_item = new_img_item.replace(rease_data_original_str, "")
+                    content = content.replace(result[0], new_img_item)
+
+                if int(result[2]) > 600:
+                    replaced_str = result[0].replace(result[1], "width=\"600\"")
+                    content = content.replace(result[0], replaced_str)
+
+        return content
+
     def get_collection(self):
+        full_title_format = u"%s - %s的回答"
+        title_fld_template = zhihu_question_title_fld_template
+        if cmp(self.type, "post") == 0:
+            full_title_format = u"%s - %s的文章"
+            title_fld_template = zhihu_post_title_fld_template
+
         answer = {}
         answer['question_id'] = self.question_id
         answer['question_title'] = self.question_title
@@ -144,24 +229,26 @@ class CollectionGetter:
         answer['contents'] = self.contents
         answer['chm_contents'] = self.chm_contents
 
-        question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin-left:auto;margin-right:auto;')
-        question_title_fld = question_title_fld.replace('{author_url}', self.author_url)
+        #question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin-left:auto;margin-right:auto;')
+        question_title_fld = title_fld_template.replace('{author_url}', self.author_url)
         question_title_fld = question_title_fld.replace('{author_name}', self.author_name)
 
         full_page = zhihu_page_header.replace('{question_title_fld}', question_title_fld)
         full_page = full_page.replace('{question_title}', self.question_title)
+        full_page = full_page.replace('{stylesheet_uri}', self.stylesheet_uri)
         full_page = full_page.replace('{answer_content}', self.contents)
         full_page = full_page.replace('{question_id}', self.question_id)
         answer['full_page'] = full_page
 
-        answer['full_title'] = u"%s - %s的回答" % (self.question_title, self.author_name)
+        answer['full_title'] = full_title_format % (self.question_title, self.author_name)
 
-        question_title_fld = zhihu_question_title_fld_template.replace('{style}', 'width:780px;margin:10px;')
+        question_title_fld = title_fld_template.replace('{style}', 'width:780px;margin:10px;')
         question_title_fld = question_title_fld.replace('{author_url}', self.author_url)
         question_title_fld = question_title_fld.replace('{author_name}', self.author_name)
 
         full_chm_page = zhihu_page_header.replace('{question_title_fld}', question_title_fld)
         full_chm_page = full_chm_page.replace('{question_title}', self.question_title)
+        full_chm_page = full_chm_page.replace('{stylesheet_uri}', self.stylesheet_uri)
         full_chm_page = full_chm_page.replace('{answer_content}', self.chm_contents)
         full_chm_page = full_chm_page.replace('{question_id}', self.question_id)
         answer['full_chm_page'] = full_chm_page
@@ -182,9 +269,23 @@ class Utils:
         r = zhihu_requests.get(url, verify=False)
         if int(r.status_code) != 200:
             logger.error('fetch XSRF fail')
+            return ""
         results = re.compile(r"\<input\stype=\"hidden\"\sname=\"_xsrf\"\svalue=\"(\S+)\"", re.DOTALL).findall(r.text)
         if len(results) < 1:
             Logging.info('fetch XSRF fail')
+            return None
+        return results[0]
+
+    @staticmethod
+    def search_stylesheet():
+        url = "https://www.zhihu.com/"
+        r = zhihu_requests.get(url, headers=headers, verify=False)
+        if int(r.status_code) != 200:
+            logger.error('fetch stylesheet fail' + " code:" + r.status_code)
+            return ""
+        results = re.compile(r"\<link\s+rel=\"stylesheet\"\s+href=\"(\S+)\"\>", re.DOTALL).findall(r.text)
+        if len(results) < 1:
+            Logging.info('fetch stylesheet fail!')
             return None
         return results[0]
 
@@ -312,19 +413,26 @@ class Utils:
             zm_invite_pager = zm_invite_pagers[0]
             page_count = len(zm_invite_pager.find_all("span")) - 2 # 上一页/下一页
 
+        results = re.compile(r"\<link\s+rel=\"stylesheet\"\s+href=\"(\S+)\"\>", re.DOTALL).findall(r.text)
+        stylesheet_uri = results[0]
+
         if page_count > 1:
             for i in range(1, page_count + 1):
                 r = zhihu_requests.get("https://www.zhihu.com/collection/" + str(collection_id) + "?page=%d" % i, headers=headers, verify=False)
                 soup = BeautifulSoup(r.content, 'html5lib')
                 zm_items = soup.find_all("div", class_="zm-item")
                 _collectionGetter = CollectionGetter()
+                _collectionGetter.set_stylesheet_uri(stylesheet_uri)
                 for zm_item in zm_items:
                     zm_item_titles = zm_item.find_all("h2", class_="zm-item-title")
                     if len(zm_item_titles) > 0:
                         _collectionGetter.set_question(zm_item_titles[0])
                     zm_item_answers = zm_item.find_all("div", class_="zm-item-answer")
+                    zm_item_posts = zm_item.find_all("div", class_="zm-item-post")
                     if len(zm_item_answers) > 0:
                         _collectionGetter.set_answer(zm_item_answers[0])
+                    elif len(zm_item_posts) > 0:
+                        _collectionGetter.set_post(zm_item_posts[0])
                     else:
                         continue
 
@@ -332,13 +440,17 @@ class Utils:
         else:
             zm_items = soup.find_all("div", class_="zm-item")
             _collectionGetter = CollectionGetter()
+            _collectionGetter.set_stylesheet_uri(stylesheet_uri)
             for zm_item in zm_items:
                 zm_item_titles = zm_item.find_all("h2", class_="zm-item-title")
                 if len(zm_item_titles) > 0:
                     _collectionGetter.set_question(zm_item_titles[0])
                 zm_item_answers = zm_item.find_all("div", class_="zm-item-answer")
+                zm_item_posts = zm_item.find_all("div", class_="zm-item-post")
                 if len(zm_item_answers) > 0:
                     _collectionGetter.set_answer(zm_item_answers[0])
+                elif len(zm_item_posts) > 0:
+                    _collectionGetter.set_post(zm_item_posts[0])
                 else:
                     continue
 
@@ -404,12 +516,15 @@ class Utils:
     # 4. link all html to index.html
     # 5. copy file from temp_dir_path to local
     @staticmethod
-    def export_html_and_res(html_content, collection_title, answer_id, base_dir=".", progress_callback=None):
+    def export_html_and_res(html_content, collection_title, answer_title, base_dir=".", progress_callback=None):
+        def get_valid_file(path):
+            return re.sub(string=path, pattern=u"[\\\/:<>|*\"?]", repl=u"")
+        formated_title = get_valid_file(answer_title)
         collection_path = "%s/%s" % (base_dir, collection_title)
         collection_res_path = "%s/res" % collection_path
         collection_css_path = "%s/css" % collection_res_path
         collection_js_path = "%s/js" % collection_res_path
-        answer_res_path = "%s/%s" % (collection_res_path, answer_id)
+        answer_res_path = "%s/%s" % (collection_res_path, formated_title)
         
         if not os.path.exists(collection_path):
             os.makedirs(collection_path)
@@ -422,11 +537,11 @@ class Utils:
         if not os.path.exists(answer_res_path):
             os.makedirs(answer_res_path)
         # ([-\w]+)\s*=\s*"([-\w\./:]+\.(?:css|js|jpg|png|bmp|jpeg))"
-        res_re_obj = re.compile(r"([-\w]+)\s*=\s*\"([-\w\./:]+\.(?:css|js|jpg|png|bmp|jpeg))\"")
+        res_re_obj = re.compile(r"([-\w]+)\s*=\s*\"([-\w\./:]+\.(?:css|js|jpg|png|bmp|jpeg))\"", re.IGNORECASE)
         results = res_re_obj.findall(html_content)
         if results:
             for result in results:
-                if cmp(result[0], "data-original") != 0:
+                if True or cmp(result[0], "data-original") != 0:
                     status = {'status': False, 'url': "", 'o': "", 'r': result[1]}
                     if result[1].endswith('.css'):
                         status = Utils.download_res(result[1], collection_css_path)
@@ -444,7 +559,13 @@ class Utils:
                     if status['status']:
                         html_content = html_content.replace(result[1], status['r'])
 
-        fname = "%s/%s.html" % (collection_path, answer_id)
+        # redirect external url
+        external_re_obj = re.compile(r"<a\s+href\s*=\s*\"(//?.*?target=(.*?))\"\s+class\s*=\s*\"\s*external\s*\".*?>", re.IGNORECASE)
+        results = external_re_obj.findall(html_content)
+        for result in results:
+            html_content = html_content.replace(result[0], urllib.unquote_plus(result[1]))
+
+        fname = "%s/%s.html" % (collection_path, formated_title)
         with open(fname, "wb") as fhndl:
              fhndl.write(html_content)
 
@@ -521,9 +642,9 @@ class Utils:
         all_pages_relative_path = []
         for answerItem in answerItems:
             if export_for_chm:
-                status = Utils.export_html_and_res(answerItem['full_chm_page'], collection['title'], answerItem['answer_id'], base_dir, progress_callback)
+                status = Utils.export_html_and_res(answerItem['full_chm_page'], collection['title'], answerItem['full_title'], base_dir, progress_callback)
             else:
-                status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['answer_id'], base_dir, progress_callback)
+                status = Utils.export_html_and_res(answerItem['full_page'], collection['title'], answerItem['full_title'], base_dir, progress_callback)
             index_html_navigator = index_html_navigator_item_template.replace("{target_html_relative_path}", status['r'])
             index_html_navigator = index_html_navigator.replace("{question_title}", answerItem['full_title'])
             html_navigator_list.append(index_html_navigator)

@@ -34,7 +34,6 @@ def get_captcha():
     url = "https://www.zhihu.com/captcha.gif"
     r = requests.get(url, headers=headers, params={"r": random.random()}, verify=False)
     if int(r.status_code) != 200:
-        print r.status_code
         raise NetworkError(u"get captcha fail")
     image_name = u"captcha." + r.headers['content-type'].split("/")[1]
     open(image_name, "wb").write(r.content)
@@ -103,7 +102,6 @@ def islogin():
     url = "https://www.zhihu.com/settings/profile"
     r = requests.get(url, headers=headers, allow_redirects=False, verify=False)
     status_code = int(r.status_code)
-    print 'status_code %d' % status_code
     if status_code == 301 or status_code == 302:
         # 未登录
         return False
